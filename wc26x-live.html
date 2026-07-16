@@ -1,0 +1,3277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC26-X // Knockout Exchange</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&family=Bebas+Neue&family=Major+Mono+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* FIFA 2026 palette, anchored to the official ball colors */
+    --pitch: #0e4a2a;          /* deep field */
+    --pitch-2: #0a3d22;         /* shadow under floodlights */
+    --pitch-3: #0a2e1a;
+    --pitch-deep: #04150b;      /* outside the stadium */
+    --chalk: #f5f5f0;            /* line paint */
+    --chalk-dim: #c8c8b8;
+    --chalk-faint: #6b7a6e;
+    --amber: #ffb800;           /* scoreboard light */
+    --amber-deep: #c98a00;
+    --maple: #d62828;            /* Canada red: losses, sells */
+    --liberty: #1d4ed8;          /* USA blue: buys, panels */
+    --liberty-soft: #3b5fd4;
+    --azteca: #006847;           /* Mexico green: accents */
+    --flip-bg: #0a0a0a;          /* split-flap card body */
+    --flip-line: #1a1a1a;
+    --flip-fg: #ffe9a3;          /* warm tungsten amber on black */
+    --turf-stripe: rgba(255,255,255,0.018);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--pitch-deep);
+    color: var(--chalk);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; line-height: 1.45;
+    min-height: 100vh;
+  }
+  body {
+    /* Turf stripes, alternating mowing pattern */
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        var(--pitch) 0,
+        var(--pitch) 80px,
+        var(--pitch-2) 80px,
+        var(--pitch-2) 160px
+      ),
+      radial-gradient(ellipse at top, rgba(255,184,0,0.08), transparent 70%);
+    background-attachment: fixed;
+  }
+  ::selection { background: var(--amber); color: #000; }
+  a { color: var(--chalk); }
+  a:hover { color: var(--amber); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--pitch-3); }
+  ::-webkit-scrollbar-thumb { background: var(--chalk-faint); }
+
+  /* =========================================
+     SPLIT-FLAP BOARD COMPONENT
+     A real airport-arrivals card flip.
+     Each "cell" is a stack of two halves;
+     when value changes, the top half drops and the
+     new value's top half flips down over it.
+     ========================================= */
+  .flipboard {
+    display: inline-flex;
+    gap: 3px;
+    background: #000;
+    padding: 5px;
+    border: 1px solid #222;
+    box-shadow: inset 0 0 12px rgba(0,0,0,0.6);
+  }
+  .flip-cell {
+    position: relative;
+    width: 22px; height: 32px;
+    background: var(--flip-bg);
+    border: 1px solid var(--flip-line);
+    overflow: hidden;
+    perspective: 200px;
+  }
+  .flip-cell.small { width: 18px; height: 26px; }
+  .flip-cell.large { width: 28px; height: 40px; }
+  .flip-cell .glyph {
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--flip-fg);
+    font-size: 26px;
+    line-height: 32px;
+    text-align: center;
+    width: 100%;
+    text-shadow: 0 0 6px rgba(255,184,0,0.3);
+    user-select: none;
+    transform: translateZ(0);
+  }
+  .flip-cell.small .glyph { font-size: 20px; line-height: 26px; }
+  .flip-cell.large .glyph { font-size: 32px; line-height: 40px; }
+  .flip-cell::after {
+    /* horizontal split line */
+    content: '';
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    height: 1px;
+    background: #000;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .flip-cell .top, .flip-cell .bottom {
+    position: absolute;
+    left: 0; right: 0;
+    height: 50%;
+    overflow: hidden;
+    background: var(--flip-bg);
+  }
+  .flip-cell .top { top: 0; }
+  .flip-cell .top .glyph { transform: translateY(0); }
+  .flip-cell .bottom { bottom: 0; }
+  .flip-cell .bottom .glyph { transform: translateY(-50%); }
+  /* The animating halves */
+  .flip-cell .flap-top, .flip-cell .flap-bottom {
+    position: absolute;
+    left: 0; right: 0;
+    height: 50%;
+    overflow: hidden;
+    background: var(--flip-bg);
+    z-index: 4;
+    backface-visibility: hidden;
+  }
+  .flip-cell .flap-top {
+    top: 0;
+    transform-origin: bottom;
+  }
+  .flip-cell .flap-top .glyph { transform: translateY(0); }
+  .flip-cell .flap-bottom {
+    bottom: 0;
+    transform-origin: top;
+  }
+  .flip-cell .flap-bottom .glyph { transform: translateY(-50%); }
+  .flip-cell.flipping .flap-top { animation: flapdown 0.45s cubic-bezier(.55,.05,.6,.95) forwards; }
+  .flip-cell.flipping .flap-bottom { animation: flapup 0.45s cubic-bezier(.55,.05,.6,.95) forwards; animation-delay: 0.45s; }
+  @keyframes flapdown {
+    0%   { transform: rotateX(0);     filter: brightness(1); }
+    99%  { transform: rotateX(-90deg); filter: brightness(0.5); }
+    100% { transform: rotateX(-90deg); opacity: 0; filter: brightness(0.5); }
+  }
+  @keyframes flapup {
+    0%   { transform: rotateX(90deg);  filter: brightness(0.5); }
+    100% { transform: rotateX(0);      filter: brightness(1); }
+  }
+
+  /* =========================================
+     STADIUM HEADER
+     ========================================= */
+  .stadium-top {
+    background: #000;
+    border-bottom: 2px solid var(--chalk);
+    position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+  .floodlight {
+    height: 6px;
+    background: linear-gradient(90deg,
+      transparent 0%, var(--amber) 12%, var(--amber) 20%, transparent 32%,
+      transparent 40%, var(--amber) 50%, var(--amber) 58%, transparent 68%,
+      transparent 78%, var(--amber) 88%, var(--amber) 95%, transparent 100%);
+    opacity: 0.7;
+  }
+  .top-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    padding: 18px 28px;
+    gap: 28px;
+    max-width: 1700px; margin: 0 auto;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .brand-mark {
+    width: 56px; height: 56px;
+    background: var(--amber);
+    color: #000;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 38px; line-height: 1;
+    position: relative;
+    border: 2px solid #000;
+    box-shadow: 0 0 0 2px var(--amber);
+  }
+  .brand-mark::before {
+    /* trophy SVG is now an inline child; this rule intentionally empty so the
+       old X glyph doesn't render on top of the trophy */
+    content: none;
+  }
+  .brand-text { display: flex; flex-direction: column; gap: 2px; }
+  .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 30px; letter-spacing: 5px; line-height: 1;
+    color: var(--chalk);
+  }
+  .brand-name .x { color: var(--amber); }
+  .brand-sub {
+    font-size: 9px; letter-spacing: 3px;
+    color: var(--chalk-faint);
+  }
+
+  .top-board {
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .top-board-block {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .tbb-label {
+    font-size: 9px; letter-spacing: 2.5px;
+    color: var(--chalk-faint);
+  }
+
+  .top-meta {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .live-tag {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    background: var(--maple);
+    color: #fff;
+    font-size: 10px; letter-spacing: 2px; font-weight: 800;
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #fff;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* =========================================
+     ABOUT STRIP (the announcement bar)
+     ========================================= */
+  .announce {
+    background: linear-gradient(90deg, var(--liberty) 0%, var(--azteca) 50%, var(--maple) 100%);
+    padding: 1px;
+  }
+  .announce-inner {
+    background: #000;
+    display: flex; align-items: stretch;
+    max-width: 1700px; margin: 0 auto;
+  }
+  .announce-tag {
+    background: var(--amber);
+    color: #000;
+    padding: 10px 16px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 3px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .announce-body {
+    flex: 1;
+    padding: 10px 18px;
+    display: flex; align-items: center; gap: 24px;
+    color: var(--chalk-dim);
+    font-size: 11px; letter-spacing: 0.5px;
+    flex-wrap: wrap;
+  }
+  .announce-body strong { color: var(--chalk); }
+  .announce-actions {
+    display: flex; align-items: stretch;
+  }
+  .ann-btn {
+    padding: 0 18px;
+    background: transparent;
+    border: none;
+    border-left: 1px solid #222;
+    color: var(--chalk);
+    font-family: inherit;
+    font-size: 11px; letter-spacing: 2px; font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ann-btn:hover { background: var(--liberty); }
+  .ann-btn.primary {
+    background: var(--amber);
+    color: #000;
+    border-left: 1px solid #000;
+  }
+  .ann-btn.primary:hover { background: #fff; }
+
+  /* =========================================
+     PA TICKER
+     ========================================= */
+  .pa-ticker {
+    background: #000;
+    border-top: 1px solid #1a1a1a;
+    border-bottom: 1px solid #1a1a1a;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 8px 0;
+  }
+  .pa-track {
+    display: inline-block;
+    animation: paScroll 140s linear infinite;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 2px;
+  }
+  .pa-item { padding: 0 36px; color: var(--chalk-dim); }
+  .pa-item .amber { color: var(--amber); }
+  .pa-item .green { color: #4ade80; }
+  .pa-item .red { color: var(--maple); }
+  .pa-item .sep { color: var(--chalk-faint); margin: 0 8px; }
+  @keyframes paScroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* =========================================
+     MAIN LAYOUT
+     ========================================= */
+  .pitch-shell {
+    max-width: 1700px; margin: 0 auto;
+    display: grid;
+    grid-template-columns: 300px 1fr 380px;
+    min-height: calc(100vh - 200px);
+    border-left: 1px solid rgba(255,255,255,0.04);
+    border-right: 1px solid rgba(255,255,255,0.04);
+  }
+  @media (max-width: 1280px) {
+    .pitch-shell { grid-template-columns: 260px 1fr; }
+    .panel-right { display: none; }
+  }
+  @media (max-width: 880px) {
+    .pitch-shell { grid-template-columns: 1fr; }
+    .panel-left { display: none; }
+  }
+
+  .panel-left, .panel-right {
+    background: rgba(4, 21, 11, 0.7);
+    backdrop-filter: blur(8px);
+  }
+  .panel-left { border-right: 1px solid rgba(255,255,255,0.08); }
+  .panel-right { border-left: 1px solid rgba(255,255,255,0.08); }
+  .panel-main {
+    background: rgba(10, 46, 26, 0.4);
+    min-height: 100%;
+    position: relative;
+  }
+
+  /* =========================================
+     LEFT PANEL: BRACKET NAVIGATOR
+     ========================================= */
+  .nav-section { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .nav-head {
+    padding: 16px 18px 8px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: 4px;
+    color: var(--chalk);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .nav-head .badge {
+    background: var(--amber); color: #000;
+    padding: 1px 7px;
+    font-size: 11px; letter-spacing: 1px;
+    font-family: 'Bebas Neue', sans-serif;
+  }
+  .nav-head .badge.muted { background: var(--chalk-faint); color: #000; }
+
+  .round-block { padding: 0 10px 14px; }
+  .round-fixture {
+    padding: 9px 12px;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: all 0.12s;
+    margin-bottom: 2px;
+  }
+  .round-fixture:hover {
+    background: rgba(255,255,255,0.04);
+    border-left-color: var(--chalk-faint);
+  }
+  .round-fixture.active {
+    background: rgba(255,184,0,0.08);
+    border-left-color: var(--amber);
+  }
+  .rf-teams {
+    font-size: 12px; font-weight: 700; color: var(--chalk);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .rf-flag { font-size: 14px; line-height: 1; }
+  .rf-vs { color: var(--chalk-faint); margin: 0 2px; font-size: 10px; }
+  .rf-meta {
+    font-size: 10px; color: var(--chalk-faint);
+    display: flex; justify-content: space-between;
+  }
+  .rf-tbd { color: var(--chalk-faint); font-style: italic; }
+
+  .futures-list { padding: 4px 10px 14px; }
+  .future-item {
+    padding: 9px 12px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.12s;
+  }
+  .future-item:hover {
+    background: rgba(255,255,255,0.04);
+    border-left-color: var(--chalk-faint);
+  }
+  .future-item.active {
+    background: rgba(255,184,0,0.08);
+    border-left-color: var(--amber);
+  }
+  .fi-name { font-size: 12px; font-weight: 700; }
+  .fi-sub { font-size: 10px; color: var(--chalk-faint); margin-top: 2px; }
+
+  .nav-footer {
+    padding: 12px 18px 18px;
+    font-size: 10px; color: var(--chalk-faint);
+    line-height: 1.7;
+  }
+  .nav-footer .reset {
+    background: none; border: none;
+    color: var(--chalk-faint);
+    text-decoration: underline;
+    cursor: pointer;
+    font-family: inherit; font-size: 10px; letter-spacing: 1px;
+    padding: 0; margin-top: 6px;
+  }
+  .nav-footer .reset:hover { color: var(--maple); }
+
+  /* =========================================
+     MAIN: FIXTURE / MARKET HEADER + CARDS
+     ========================================= */
+  .fixture-header {
+    padding: 24px 30px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(4,21,11,0.85) 0%, rgba(4,21,11,0.4) 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .fixture-header::before {
+    /* center circle motif on the right */
+    content: '';
+    position: absolute;
+    right: -140px; top: 50%;
+    transform: translateY(-50%);
+    width: 280px; height: 280px;
+    border: 2px solid rgba(255,255,255,0.05);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .fixture-header::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: rgba(255,255,255,0.05);
+    pointer-events: none;
+  }
+  .fixture-breadcrumb {
+    font-size: 10px; letter-spacing: 2px; color: var(--chalk-faint);
+    margin-bottom: 8px;
+  }
+  .fixture-breadcrumb .amber { color: var(--amber); }
+  .fixture-title-row {
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .team-block {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .team-flag { font-size: 36px; line-height: 1; }
+  .team-code-name {
+    display: flex; flex-direction: column;
+  }
+  .team-code {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px; letter-spacing: 2px; line-height: 1;
+    color: var(--chalk);
+  }
+  .team-name {
+    font-size: 11px; letter-spacing: 1.5px;
+    color: var(--chalk-faint);
+    margin-top: 3px;
+  }
+  .vs-divider {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px; letter-spacing: 2px;
+    color: var(--amber);
+  }
+  .fixture-meta-row {
+    display: flex; gap: 28px; flex-wrap: wrap;
+    font-size: 11px;
+  }
+  .fxm { display: flex; flex-direction: column; gap: 3px; }
+  .fxm-l { font-size: 9px; letter-spacing: 1.5px; color: var(--chalk-faint); }
+  .fxm-v { color: var(--chalk); font-weight: 700; }
+
+  /* MARKETS TABS */
+  .market-tabs {
+    display: flex;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.3);
+    overflow-x: auto;
+  }
+  .mtab {
+    padding: 14px 22px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 3px;
+    color: var(--chalk-faint);
+    background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .mtab:hover { color: var(--chalk); }
+  .mtab.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+  /* MARKET CARDS */
+  .markets-wrap { padding: 22px 26px 60px; }
+  .mkt-card {
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 18px;
+  }
+  .mkt-card-head {
+    padding: 12px 18px;
+    background: rgba(0,0,0,0.5);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px;
+  }
+  .mkt-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: 2px;
+  }
+  .info-box {
+    margin: 0 0 12px 0;
+    border: 1px solid rgba(255, 195, 0, 0.25);
+    border-left: 3px solid var(--amber);
+    background: rgba(255, 195, 0, 0.04);
+    padding: 14px 16px;
+  }
+  .info-box-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--amber); margin-bottom: 10px;
+  }
+  .info-box-body p {
+    font-size: 11px; color: var(--chalk-faint);
+    margin: 0 0 8px 0; line-height: 1.6;
+  }
+  .info-box-body p:last-child { margin-bottom: 0; }
+  .info-box-body strong { color: var(--chalk); }
+
+  .mkt-desc {
+    font-size: 10px; color: var(--chalk-faint);
+    margin-top: 3px; letter-spacing: 0.3px;
+  }
+  .mkt-tag {
+    font-size: 9px; letter-spacing: 1.5px;
+    padding: 3px 8px;
+    color: var(--amber);
+    border: 1px solid var(--amber);
+  }
+  .mkt-tag.locked {
+    color: var(--chalk-faint);
+    border-color: var(--chalk-faint);
+  }
+
+  /* OUTCOME ROW */
+  .outcome {
+    display: grid;
+    grid-template-columns: 1.7fr 0.7fr 1fr 1.2fr;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    gap: 16px;
+    transition: background 0.1s;
+  }
+  .outcome:last-child { border-bottom: none; }
+  .outcome:hover { background: rgba(255,184,0,0.03); }
+
+  .out-name { display: flex; align-items: center; gap: 10px; }
+  .out-flag { font-size: 22px; line-height: 1; }
+  .out-codeblock {
+    display: flex; flex-direction: column;
+  }
+  .out-code {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 1.5px; line-height: 1;
+  }
+  .out-label {
+    font-size: 10px; color: var(--chalk-faint);
+    margin-top: 3px;
+  }
+
+  .out-prob-flap {
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .out-spark { height: 30px; }
+
+  .obtns { display: flex; gap: 4px; }
+  .obtn {
+    flex: 1;
+    padding: 9px 6px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--chalk);
+    font-family: inherit; font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: all 0.12s;
+    min-width: 0;
+  }
+  .obtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .obtn:not(:disabled):hover { transform: translateY(-1px); }
+  .obtn.buy { color: var(--liberty-soft); border-color: rgba(29,78,216,0.4); }
+  .obtn.buy:not(:disabled):hover { background: rgba(29,78,216,0.15); border-color: var(--liberty-soft); }
+  .obtn.sell { color: var(--maple); border-color: rgba(214,40,40,0.4); }
+  .obtn.sell:not(:disabled):hover { background: rgba(214,40,40,0.15); border-color: var(--maple); }
+  .obtn-side { font-size: 8px; letter-spacing: 1.5px; opacity: 0.75; }
+  .obtn .price { font-size: 13px; }
+
+  /* PRE-LAUNCH LOCK STATE */
+  .lock-banner {
+    background: linear-gradient(180deg, rgba(255,184,0,0.08) 0%, transparent 100%);
+    border: 1px dashed var(--amber);
+    padding: 16px 20px;
+    margin: 0 26px 22px;
+    margin-top: 22px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .lock-banner-text {
+    flex: 1;
+    font-size: 12px; color: var(--chalk-dim); line-height: 1.6;
+  }
+  .lock-banner-text strong { color: var(--amber); }
+
+  /* =========================================
+     RIGHT PANEL: POSITIONS + TAPE + LEADERBOARD
+     ========================================= */
+  .rp-section { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .rp-head {
+    padding: 16px 18px 8px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 3px;
+    color: var(--chalk);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .rp-head .ctrl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 1.5px;
+    color: var(--amber); cursor: pointer;
+  }
+
+  .pos-list { padding: 0 16px 16px; }
+  .pos-empty {
+    color: var(--chalk-faint); font-size: 11px; font-style: italic;
+    padding: 8px 0;
+  }
+  .pos {
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    font-size: 11px;
+  }
+  .pos:last-child { border-bottom: none; }
+  .pos-l1 { font-weight: 600; color: var(--chalk); }
+  .pos-l2 { font-size: 10px; color: var(--chalk-faint); margin-top: 2px; }
+  .pos-pnl { text-align: right; font-weight: 700; font-size: 13px; }
+  .pos-pnl.pos { color: #4ade80; }
+  .pos-pnl.neg { color: var(--maple); }
+  .pos-mark { text-align: right; font-size: 10px; color: var(--chalk-faint); margin-top: 2px; }
+
+  /* OPEN ORDERS */
+  .orders-list { padding: 0 16px 16px; }
+  .order {
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: grid; grid-template-columns: 1fr auto; gap: 8px;
+    font-size: 11px; align-items: center;
+  }
+  .order:last-child { border-bottom: none; }
+  .order-l1 {
+    font-weight: 600; color: var(--chalk);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .order-l2 { font-size: 10px; color: var(--chalk-faint); margin-top: 3px; }
+  .order-side {
+    font-size: 9px; font-weight: 700; padding: 2px 5px;
+    letter-spacing: 1px;
+  }
+  .order-side.buy { color: var(--liberty-soft); border: 1px solid var(--liberty-soft); }
+  .order-side.sell { color: var(--maple); border: 1px solid var(--maple); }
+  .order-cancel {
+    background: transparent; border: 1px solid var(--chalk-faint);
+    color: var(--chalk-faint); padding: 5px 9px; font-size: 9px;
+    letter-spacing: 1px; cursor: pointer; font-family: inherit;
+    transition: all 120ms ease;
+  }
+  .order-cancel:hover { border-color: var(--maple); color: var(--maple); }
+  .order-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ADMIN SETTLEMENT PANEL */
+  .admin-body { padding: 0 16px 16px; }
+  .admin-entry { margin-bottom: 12px; }
+  .admin-sel {
+    width: 100%; background: var(--turf-deep); color: var(--chalk);
+    border: 1px solid rgba(255,255,255,0.15); padding: 6px 8px;
+    font-family: inherit; font-size: 11px; margin-bottom: 8px;
+  }
+  .admin-score-row { display: flex; align-items: center; gap: 6px; }
+  .admin-inp {
+    width: 44px; background: var(--turf-deep); color: var(--chalk);
+    border: 1px solid rgba(255,255,255,0.15); padding: 6px 8px;
+    font-family: inherit; font-size: 13px; text-align: center;
+  }
+  .admin-btn {
+    padding: 6px 12px; font-family: inherit; font-size: 10px;
+    letter-spacing: 1px; cursor: pointer; border: none; font-weight: 700;
+  }
+  .admin-btn.stage { background: var(--amber); color: var(--turf-deep); }
+  .admin-btn.confirm { background: #4ade80; color: var(--turf-deep); }
+  .admin-btn.reject { background: var(--maple); color: #fff; }
+  .admin-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .admin-pending { }
+  .admin-pr {
+    padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; gap: 6px;
+  }
+  .admin-pr-info { color: var(--chalk); }
+  .admin-pr-score { font-weight: 700; color: var(--amber); }
+  .admin-pr-status { font-size: 9px; letter-spacing: 1px; }
+  .admin-pr-status.confirmed { color: #4ade80; }
+  .admin-pr-status.pending { color: var(--amber); }
+  .admin-pr-actions { display: flex; gap: 4px; }
+
+  .tape-list { padding: 0 16px 16px; max-height: 280px; overflow-y: auto; }
+  .tape {
+    padding: 8px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+    align-items: center;
+    font-size: 11px;
+  }
+  .tape:last-child { border-bottom: none; }
+  .tape-side {
+    font-size: 9px; font-weight: 700; padding: 2px 6px;
+    letter-spacing: 1px;
+  }
+  .tape-side.buy { color: var(--liberty-soft); border: 1px solid var(--liberty-soft); }
+  .tape-side.sell { color: var(--maple); border: 1px solid var(--maple); }
+  .tape-name { font-size: 11px; color: var(--chalk); }
+  .tape-name small { display: block; color: var(--chalk-faint); font-size: 9px; }
+  .tape-px { font-size: 11px; font-weight: 700; text-align: right; }
+  .tape-time { font-size: 9px; color: var(--chalk-faint); text-align: right; margin-top: 2px; }
+
+  /* LEADERBOARD (mock, until backend) */
+  .lb-list { padding: 0 16px 16px; }
+  .lb-row {
+    padding: 9px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: grid; grid-template-columns: 24px 1fr auto; gap: 10px;
+    align-items: center;
+  }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; line-height: 1;
+    color: var(--chalk-faint);
+    text-align: center;
+  }
+  .lb-row.gold .lb-rank { color: var(--amber); }
+  .lb-row.silver .lb-rank { color: #c0c0c0; }
+  .lb-row.bronze .lb-rank { color: #cd7f32; }
+  .lb-row.me {
+    background: rgba(255,184,0,0.06);
+    border-left: 3px solid var(--amber);
+    padding-left: 8px;
+  }
+  .lb-name { font-size: 12px; color: var(--chalk); }
+  .lb-pnl { text-align: right; font-size: 12px; font-weight: 700; }
+  .lb-pnl.pos { color: #4ade80; }
+  .lb-pnl.neg { color: var(--maple); }
+
+  /* =========================================
+     MODALS
+     ========================================= */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--pitch-deep);
+    border: 1px solid var(--chalk);
+    width: 480px; max-width: 92vw;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 0 4px rgba(255,184,0,0.1), 0 0 80px rgba(255,184,0,0.2);
+    position: relative;
+  }
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px;
+    height: 4px;
+    background: linear-gradient(90deg, var(--liberty) 0%, var(--azteca) 50%, var(--maple) 100%);
+  }
+  .modal-head {
+    padding: 16px 22px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 3px;
+    color: var(--amber);
+  }
+  .modal-x {
+    background: none; border: none;
+    color: var(--chalk-faint);
+    cursor: pointer; font-size: 18px;
+    font-family: inherit;
+  }
+  .modal-x:hover { color: var(--chalk); }
+  .modal-body { padding: 24px; overflow-y: auto; min-height: 0; flex: 1; }
+
+  .modal-intro {
+    font-size: 12px; line-height: 1.7; color: var(--chalk-dim);
+    margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 1px dashed rgba(255,255,255,0.1);
+  }
+  .modal-intro strong { color: var(--amber); }
+
+  .rules {
+    list-style: none;
+    font-size: 11px; line-height: 1.8;
+    color: var(--chalk-dim);
+    margin-bottom: 18px;
+  }
+  .rules li { padding: 4px 0 4px 18px; position: relative; }
+  .rules li::before {
+    content: '⚽'; position: absolute; left: 0;
+    font-size: 10px;
+  }
+  .rules strong { color: var(--chalk); }
+  .rules .pos { color: #4ade80; }
+
+  .field { margin-bottom: 14px; }
+  .field-l {
+    font-size: 10px; letter-spacing: 1.5px;
+    color: var(--chalk-faint);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    display: flex; justify-content: space-between;
+  }
+  .field-l .hint { color: var(--chalk-faint); font-weight: 400; }
+  .inp {
+    width: 100%;
+    padding: 12px 14px;
+    background: #000;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--chalk);
+    font-family: inherit; font-size: 14px; font-weight: 700;
+  }
+  .inp:focus { outline: none; border-color: var(--amber); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .btn {
+    flex: 1; padding: 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--chalk);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 3px;
+    cursor: pointer;
+  }
+  .btn:hover { background: rgba(255,255,255,0.1); }
+  .btn.primary {
+    background: var(--amber); color: #000;
+    border-color: var(--amber);
+  }
+  .btn.primary:hover { background: #fff; border-color: #fff; }
+  .btn.primary:disabled {
+    background: rgba(255,255,255,0.08);
+    color: var(--chalk-faint); border-color: rgba(255,255,255,0.1);
+    cursor: not-allowed;
+  }
+
+  /* TRADE MODAL specifics */
+  .trade-outcome {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 18px;
+    padding: 14px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .trade-out-flag { font-size: 36px; }
+  .trade-out-info {
+    flex: 1;
+  }
+  .trade-out-mkt { font-size: 10px; letter-spacing: 1.5px; color: var(--chalk-faint); }
+  .trade-out-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px; letter-spacing: 2px;
+    line-height: 1.1;
+    margin-top: 4px;
+  }
+  .side-toggle-wrap {
+    display: flex;
+    border: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 18px;
+  }
+  .side-toggle {
+    flex: 1; padding: 12px;
+    background: transparent;
+    color: var(--chalk-faint);
+    border: none; cursor: pointer;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 2px;
+  }
+  .side-toggle.active.buy { background: var(--liberty); color: #fff; }
+  .side-toggle.active.sell { background: var(--maple); color: #fff; }
+
+  .quick-row { display: flex; gap: 6px; margin-top: 6px; }
+  .quick {
+    flex: 1; padding: 7px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--chalk-faint);
+    font-family: inherit; font-size: 10px;
+    cursor: pointer;
+  }
+  .quick:hover { color: var(--amber); border-color: var(--amber); }
+
+  .book-peek {
+    margin-top: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.4);
+  }
+  .book-peek-head {
+    padding: 8px 12px;
+    font-size: 9px; letter-spacing: 1.5px; color: var(--chalk-faint);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+  }
+  .book-peek-head span:nth-child(2) { text-align: center; }
+  .book-peek-head span:nth-child(3) { text-align: right; }
+  .book-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+  .book-row .qty { color: var(--chalk-faint); }
+  .book-row .px-bid { color: var(--liberty-soft); text-align: center; font-weight: 700; }
+  .book-row .px-ask { color: var(--maple); text-align: center; font-weight: 700; }
+  .book-row .qty-r { text-align: right; color: var(--chalk-faint); }
+  .book-spread {
+    padding: 5px 12px;
+    font-size: 10px; color: var(--chalk-faint);
+    background: rgba(0,0,0,0.4);
+    border-top: 1px dashed rgba(255,255,255,0.08);
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+    display: flex; justify-content: space-between;
+  }
+  .book-spread .v { color: var(--amber); font-weight: 700; }
+
+  .recap {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 14px;
+    margin-top: 14px;
+  }
+  .recap-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .recap-row .l { color: var(--chalk-faint); }
+  .recap-row .v { font-weight: 700; }
+  .recap-row.total {
+    border-top: 1px dashed rgba(255,255,255,0.1);
+    margin-top: 6px; padding-top: 8px;
+  }
+  .recap-row.total .v { color: var(--amber); font-size: 14px; }
+
+  /* TOASTS, styled as PA announcements */
+  .toast-wrap {
+    position: fixed; bottom: 30px; right: 30px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 2000;
+  }
+  .toast {
+    background: #000;
+    border: 1px solid var(--chalk-faint);
+    border-left: 4px solid var(--amber);
+    padding: 12px 18px;
+    min-width: 290px;
+    font-size: 12px;
+    animation: toastIn 0.3s ease-out;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  }
+  .toast.buy { border-left-color: var(--liberty); }
+  .toast.sell { border-left-color: var(--maple); }
+  .toast.err { border-left-color: var(--maple); background: rgba(214,40,40,0.08); }
+  .toast strong {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px; letter-spacing: 2px;
+    color: var(--amber);
+    display: block; margin-bottom: 4px;
+  }
+  .toast.buy strong { color: var(--liberty-soft); }
+  .toast.sell strong { color: var(--maple); }
+  .toast.err strong { color: var(--maple); }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(40px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* DISCLAIMER */
+  .disclaim {
+    background: repeating-linear-gradient(45deg,
+      var(--liberty) 0 14px,
+      var(--maple) 14px 28px,
+      var(--azteca) 28px 42px);
+    height: 6px;
+  }
+  .disclaim-text {
+    background: #000;
+    text-align: center;
+    padding: 8px;
+    font-size: 9px; letter-spacing: 2.5px;
+    color: var(--chalk-faint);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .disclaim-text strong { color: var(--amber); }
+
+  /* SETTLEMENT BANNER */
+  .pre-launch-bar {
+    background: rgba(0,0,0,0.55);
+    border: 1px solid var(--amber);
+    padding: 18px 24px;
+    margin: 0 26px 22px;
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 24px;
+  }
+  .pre-launch-bar .l-side {
+    font-size: 12px; line-height: 1.7;
+    color: var(--chalk-dim);
+  }
+  .pre-launch-bar .l-side .ttl {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px; letter-spacing: 2px;
+    color: var(--amber);
+    margin-bottom: 6px;
+  }
+  .pre-launch-bar .r-side {
+    text-align: right;
+  }
+  .pre-launch-bar .r-side .l {
+    font-size: 9px; letter-spacing: 2px;
+    color: var(--chalk-faint);
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div class="disclaim"></div>
+<div class="disclaim-text">⚽ <strong>PLAY MONEY ONLY</strong> ⚽ NOT A REAL EXCHANGE ⚽ NO REAL WAGERING ⚽ BUILT TO STUDY MARKET MICROSTRUCTURE ⚽</div>
+
+<header class="stadium-top">
+  <div class="floodlight"></div>
+  <div class="top-row">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:32px;height:32px">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+          <path d="M4 22h16"/>
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">WC26<span class="x">-X</span></div>
+        <div class="brand-sub">KNOCKOUT EXCHANGE · USA · MEX · CAN</div>
+      </div>
+    </div>
+
+    <div class="top-board">
+      <div class="top-board-block">
+        <span class="tbb-label">BANKROLL</span>
+        <div id="boardBankroll" class="flipboard"></div>
+      </div>
+      <div class="top-board-block">
+        <span class="tbb-label">★ REALIZED P&amp;L</span>
+        <div id="boardRealized" class="flipboard"></div>
+      </div>
+      <div class="top-board-block">
+        <span class="tbb-label">OPEN P&amp;L</span>
+        <div id="boardOpen" class="flipboard"></div>
+      </div>
+      <div class="top-board-block">
+        <span class="tbb-label">TRADES</span>
+        <div id="boardTrades" class="flipboard"></div>
+      </div>
+    </div>
+
+    <div class="top-meta">
+      <div class="live-tag" id="liveBadge"><span class="live-dot"></span>PRE-LAUNCH</div>
+    </div>
+  </div>
+  <div class="floodlight"></div>
+</header>
+
+<div class="announce">
+  <div class="announce-inner">
+    <div class="announce-tag">★ ABOUT</div>
+    <div class="announce-body">
+      <span><strong>WC26 EXCHANGE</strong></span>
+      <span class="sep">·</span>
+      <span>A working prediction market, built to understand how one works</span>
+      <span class="sep">·</span>
+      <span>Central limit order book with <strong>price-time priority</strong></span>
+      <span class="sep">·</span>
+      <span>Binary contracts on all 72 group-stage fixtures</span>
+    </div>
+    <div class="announce-actions">
+      <button class="ann-btn" id="rulesBtn">HOW IT WORKS</button>
+      <button class="ann-btn primary" id="signupBtn">SIGN UP →</button>
+    </div>
+  </div>
+</div>
+
+<div class="pa-ticker">
+  <div class="pa-track" id="paTicker"></div>
+</div>
+
+<div class="pitch-shell">
+
+  <!-- LEFT: BRACKET / FUTURES NAV -->
+  <aside class="panel-left">
+    <div class="nav-section">
+      <div class="nav-head">
+        <span>★ BRACKET</span>
+        <span class="badge muted" id="bracketBadge">PROJ.</span>
+      </div>
+      <div id="bracketNav"></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-head"><span>★ FUTURES</span></div>
+      <div class="futures-list" id="futuresNav"></div>
+    </div>
+    <div class="nav-footer">
+      Group stage <strong style="color:var(--chalk)">Jun 11–27</strong>.<br>
+      Trading opens <strong style="color:var(--chalk)">Jun 11</strong>.<br>
+      Final <strong style="color:var(--chalk)">Jul 19</strong>.<br>
+      Your bankroll, trades, and P&amp;L are recorded server-side<br>
+      and persist across sign-outs.<br>
+      <button class="reset" id="resetBtn">↻ sign out</button>
+    </div>
+  </aside>
+
+  <!-- CENTER: FIXTURE / MARKETS -->
+  <main class="panel-main">
+    <div id="fixtureHeader"></div>
+    <div class="market-tabs" id="marketTabs"></div>
+    <div id="lockBanner"></div>
+    <div class="markets-wrap" id="marketsBody"></div>
+  </main>
+
+  <!-- RIGHT: POSITIONS / TAPE / LEADERBOARD -->
+  <aside class="panel-right">
+    <div class="rp-section">
+      <div class="rp-head">
+        <span>★ LEADERBOARD</span>
+        <span class="ctrl" id="lbHint">DEMO</span>
+      </div>
+      <div class="lb-list" id="leaderboardList"></div>
+    </div>
+    <div class="rp-section">
+      <div class="rp-head"><span>★ POSITIONS</span></div>
+      <div class="pos-list" id="posList"></div>
+    </div>
+    <div class="rp-section">
+      <div class="rp-head"><span>★ OPEN ORDERS</span><span class="ctrl" id="cancelAllBtn">CANCEL ALL</span></div>
+      <div class="orders-list" id="ordersList"></div>
+    </div>
+    <div class="rp-section">
+      <div class="rp-head"><span>★ TAPE</span><span class="ctrl" id="clearTape">CLEAR</span></div>
+      <div class="tape-list" id="tapeList"></div>
+    </div>
+    <!-- ADMIN SETTLEMENT PANEL. Visible only when is_admin = true -->
+    <div class="rp-section" id="adminPanel" style="display:none;">
+      <div class="rp-head"><span>⚙ ADMIN · SETTLE</span></div>
+      <div class="admin-body" id="adminBody">
+        <div class="admin-entry" id="adminEntry">
+          <select id="adminFixture" class="admin-sel"></select>
+          <div class="admin-score-row">
+            <input type="number" id="adminGoalsHome" class="admin-inp" min="0" max="20" placeholder="H">
+            <span style="color:var(--chalk-faint);">–</span>
+            <input type="number" id="adminGoalsAway" class="admin-inp" min="0" max="20" placeholder="A">
+            <button id="adminStageBtn" class="admin-btn stage">STAGE</button>
+          </div>
+        </div>
+        <div id="adminPendingList" class="admin-pending"></div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ============== MODALS ============== -->
+
+<!-- SIGNUP MODAL -->
+<div class="modal-overlay" id="signupModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">★ RESERVE YOUR HANDLE</span>
+      <button class="modal-x" data-close="signupModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-intro">
+        Create a handle to start trading on the <strong>WC26 Exchange</strong>.
+        You get a play-money bankroll and access to every market.
+        No purchase, no real wagering, nothing at stake but your own curiosity.
+      </div>
+      <div class="field">
+        <div class="field-l"><span>Display Name</span><span class="hint">shown on leaderboard</span></div>
+        <input type="text" class="inp" id="suName" maxlength="40" placeholder="e.g. Laura D.">
+      </div>
+      <div class="field">
+        <div class="field-l"><span>LinkedIn URL</span><span class="hint">so traders aren't anonymous</span></div>
+        <input type="url" class="inp" id="suLinkedin" placeholder="https://linkedin.com/in/yourname">
+      </div>
+      <div class="field">
+        <div class="field-l"><span>Email</span><span class="hint">your login</span></div>
+        <input type="email" class="inp" id="suEmail" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <div class="field-l"><span>Password</span><span class="hint">min 6 chars</span></div>
+        <input type="password" class="inp" id="suPassword" placeholder="••••••••">
+      </div>
+      <ul class="rules">
+        <li>Starting bankroll: <strong>$10,000</strong> in play money.</li>
+        <li>Every contract pays <strong>$1.00</strong> if the outcome happens, <strong>$0.00</strong> if it doesn't.</li>
+        <li>The leaderboard ranks by <strong>realized P&amp;L</strong>, so you have to close a position for it to count.</li>
+        <li>Markets cover match result, total goals O/U 2.5, and both teams to score, plus futures.</li>
+        <li>Order book matching with price-time priority. Max 500 shares per order.</li>
+      </ul>
+      <div class="modal-actions">
+        <button class="btn primary" id="suSubmit">RESERVE HANDLE</button>
+      </div>
+      <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--chalk-faint)">
+        <a href="#" id="toggleAuthMode" style="color:var(--amber);text-decoration:underline">Already registered? Sign in</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RULES MODAL -->
+<div class="modal-overlay" id="rulesModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">★ HOW IT WORKS</span>
+      <button class="modal-x" data-close="rulesModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-intro">
+        I won $180 trading recessions and gas prices on Kalshi and wanted to know what was
+        running underneath. How does the price move? Who is on the other side of my trade?
+        How does the platform know what to pay me? The way I learn is by building, so I built one.
+      </div>
+
+      <div class="field-l" style="margin-bottom:8px"><span>Binary contracts</span></div>
+      <ul class="rules" style="font-size:12px">
+        <li>Each row in a market is a contract paying <strong>$1.00</strong> if that outcome happens and <strong>$0.00</strong> if it doesn't.</li>
+        <li>The price in cents is the implied probability. A contract at 40¢ means the market thinks there is roughly a 40% chance.</li>
+        <li><strong>BUY YES</strong> if you think it happens. <strong>BUY NO</strong> if you think it doesn't. Buying YES at 40¢ is the same trade as selling NO at 60¢.</li>
+      </ul>
+
+      <div class="field-l" style="margin:16px 0 8px"><span>The order book</span></div>
+      <ul class="rules" style="font-size:12px">
+        <li>Post a limit order and it rests in the book until someone takes the other side. Prices come from traders, not from a bookmaker.</li>
+        <li><strong>Price-time priority:</strong> the best price fills first, and at the same price the earliest order fills first.</li>
+        <li>Fills happen at the resting order's price, so if you bid 45¢ and the best ask is 41¢, you pay 41¢.</li>
+        <li>Your order can sweep several price levels. Whatever doesn't fill rests as a new limit.</li>
+      </ul>
+
+      <div class="field-l" style="margin:16px 0 8px"><span>Your money</span></div>
+      <ul class="rules" style="font-size:12px">
+        <li>Placing an order escrows your worst case loss up front: <strong>price</strong> per share to buy, <strong>100 minus price</strong> per share to sell. You can never owe more than your bankroll.</li>
+        <li>Positions carry a weighted-average cost basis. Closing one realizes P&amp;L against that basis.</li>
+        <li>The leaderboard ranks by <strong>realized</strong> P&amp;L, so paper gains don't count until you close or the market settles.</li>
+      </ul>
+
+      <div class="field-l" style="margin:16px 0 8px"><span>Settlement</span></div>
+      <ul class="rules" style="font-size:12px">
+        <li>When a match ends, resting orders are cancelled and their escrow returned, then positions pay out at $1.00 or $0.00.</li>
+        <li>Settlement P&amp;L stacks on top of anything you already realized by trading.</li>
+      </ul>
+
+      <div class="modal-actions">
+        <button class="btn primary" data-close="rulesModal">GOT IT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRADE MODAL -->
+<div class="modal-overlay" id="tradeModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">★ ORDER ENTRY</span>
+      <button class="modal-x" data-close="tradeModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="trade-outcome">
+        <span class="trade-out-flag" id="tmFlag">⚽</span>
+        <div class="trade-out-info">
+          <div class="trade-out-mkt" id="tmMkt">—</div>
+          <div class="trade-out-name" id="tmName">—</div>
+        </div>
+      </div>
+
+      <div class="side-toggle-wrap">
+        <button class="side-toggle buy active" id="sideBuy">BUY YES</button>
+        <button class="side-toggle sell" id="sideSell">BUY NO</button>
+      </div>
+
+      <div class="field">
+        <div class="field-l"><span>Limit Price (¢)</span><span class="hint" id="bestHint"></span></div>
+        <input type="number" class="inp" id="tmPrice" min="1" max="99" step="1">
+      </div>
+
+      <div class="field">
+        <div class="field-l"><span>Shares</span><span class="hint">$1 max payout each</span></div>
+        <input type="number" class="inp" id="tmQty" min="1" max="500" step="1" value="100">
+        <div class="quick-row">
+          <button class="quick" data-qty="10">10</button>
+          <button class="quick" data-qty="50">50</button>
+          <button class="quick" data-qty="100">100</button>
+          <button class="quick" data-qty="500">500</button>
+        </div>
+      </div>
+
+      <div class="book-peek">
+        <div class="book-peek-head"><span>BIDS</span><span>PRICE</span><span>ASKS</span></div>
+        <div id="bookPeek"></div>
+        <div class="book-spread"><span>SPREAD</span><span class="v" id="bookSpread">—</span></div>
+      </div>
+
+      <div class="recap">
+        <div class="recap-row"><span class="l">Avg Fill</span><span class="v" id="rcAvg">—</span></div>
+        <div class="recap-row"><span class="l">Filled / Resting</span><span class="v" id="rcFill">—</span></div>
+        <div class="recap-row"><span class="l">Max Payout</span><span class="v" id="rcPay">—</span></div>
+        <div class="recap-row total"><span class="l">COST</span><span class="v" id="rcCost">—</span></div>
+      </div>
+
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn" data-close="tradeModal">CANCEL</button>
+        <button class="btn primary" id="tmSubmit">SUBMIT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal" style="width:560px">
+    <div class="modal-head">
+      <span class="modal-title" id="pfTitle">★ YOUR PROFILE</span>
+      <button class="modal-x" data-close="profileModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="trade-outcome" style="margin-bottom:14px">
+        <span class="trade-out-flag">👤</span>
+        <div class="trade-out-info">
+          <div class="trade-out-mkt" id="pfLinkedin">—</div>
+          <div class="trade-out-name" id="pfName">—</div>
+        </div>
+      </div>
+      <div class="recap" style="margin-top:0">
+        <div class="recap-row"><span class="l">Realized P&amp;L</span><span class="v" id="pfRealized">—</span></div>
+        <div class="recap-row"><span class="l">Open mark-to-market</span><span class="v" id="pfOpen">—</span></div>
+        <div class="recap-row"><span class="l">Bankroll</span><span class="v" id="pfBankroll">—</span></div>
+        <div class="recap-row"><span class="l">Trades</span><span class="v" id="pfTrades">—</span></div>
+        <div class="recap-row total"><span class="l">LEADERBOARD RANK</span><span class="v" id="pfRank">—</span></div>
+      </div>
+
+      <div class="field-l" style="margin:18px 0 6px"><span>Open Positions</span></div>
+      <div id="pfPositions" style="max-height:140px;overflow:auto"></div>
+
+      <div class="field-l" style="margin:18px 0 6px"><span>Recent Trades</span><span class="hint">your fills</span></div>
+      <div id="pfTrades2" style="max-height:200px;overflow:auto"></div>
+
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn" id="pfSignOut">SIGN OUT</button>
+        <button class="btn primary" data-close="profileModal">CLOSE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* =================================================================
+   WC26-X: World Cup 2026 Exchange (Supabase-backed)
+   Data source: Supabase (auth + Postgres CLOB engine + realtime).
+   `state` is a read-through cache hydrated on load and by realtime;
+   render functions read from it synchronously and are unchanged.
+   ================================================================= */
+
+/* ----- SUPABASE CONFIG ----- */
+const SUPA_URL = 'https://txcthqpnzkvctyhdircz.supabase.co';
+const SUPA_KEY = 'sb_publishable_Orjs1DS_GJsGgvYnqFfvLg_2QB6dJKL'; // publishable key (safe in client)
+const sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+let SESSION = null;   // current auth session
+let RT = null;        // realtime channel handle
+
+const STORAGE_KEY = 'wc26x_v1';
+const STARTING_BANKROLL = 10000;
+
+/* ----- MARKET WINDOW CONFIG ----- */
+const MARKETS_OPEN_ISO  = '2026-06-11T17:00:00.000Z'; // 1pm EDT, 2hrs before the first kickoff
+const MARKETS_CLOSE_ISO = '2026-07-20T03:00:00.000Z'; // ~11pm ET July 19, after final whistle
+const MARKETS_OPEN_MS  = new Date(MARKETS_OPEN_ISO).getTime();
+const MARKETS_CLOSE_MS = new Date(MARKETS_CLOSE_ISO).getTime();
+
+
+/* FLAGS: code to emoji map covering all 48 WC2026 qualifiers (and a few more,
+   to be tolerant of API-Football's code variants). Used by flagFor() ahead
+   of the TEAMS catalog (which is the smaller original favorites set). */
+const FLAGS = {
+  ARG: '🇦🇷', AUS: '🇦🇺', AUT: '🇦🇹', BEL: '🇧🇪', BIH: '🇧🇦', BLR: '🇧🇾',
+  BRA: '🇧🇷', CAN: '🇨🇦', CHI: '🇨🇱', CHN: '🇨🇳', CIV: '🇨🇮', COL: '🇨🇴',
+  CRC: '🇨🇷', CRO: '🇭🇷', CUR: '🇨🇼', CZE: '🇨🇿', DEN: '🇩🇰', DZA: '🇩🇿',
+  ALG: '🇩🇿', ECU: '🇪🇨', EGY: '🇪🇬', ENG: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', ESP: '🇪🇸', FIN: '🇫🇮',
+  FRA: '🇫🇷', GER: '🇩🇪', GHA: '🇬🇭', GRE: '🇬🇷', HAI: '🇭🇹', HON: '🇭🇳',
+  HUN: '🇭🇺', IRL: '🇮🇪', IRN: '🇮🇷', IRQ: '🇮🇶', ISL: '🇮🇸', ISR: '🇮🇱',
+  ITA: '🇮🇹', JAM: '🇯🇲', JOR: '🇯🇴', JPN: '🇯🇵', KOR: '🇰🇷', KSA: '🇸🇦',
+  MAR: '🇲🇦', MEX: '🇲🇽', NED: '🇳🇱', NGA: '🇳🇬', NOR: '🇳🇴', NZL: '🇳🇿',
+  OMA: '🇴🇲', PAN: '🇵🇦', PAR: '🇵🇾', PER: '🇵🇪', POL: '🇵🇱', POR: '🇵🇹',
+  QAT: '🇶🇦', ROU: '🇷🇴', RSA: '🇿🇦', ZAF: '🇿🇦', RUS: '🇷🇺', SCO: '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  SEN: '🇸🇳', SLO: '🇸🇮', SRB: '🇷🇸', SUI: '🇨🇭', SVK: '🇸🇰', SWE: '🇸🇪',
+  SYR: '🇸🇾', TUN: '🇹🇳', TUR: '🇹🇷', UAE: '🇦🇪', UKR: '🇺🇦', URU: '🇺🇾',
+  USA: '🇺🇸', UZB: '🇺🇿', VEN: '🇻🇪', VIE: '🇻🇳', WAL: '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
+};
+
+/* ----- TEAM CATALOG (projected favorites for the bracket) -----
+   FIFA-ranking-derived priors; these are placeholders until the
+   real bracket is drawn after the group stage finishes June 27.    */
+const TEAMS = {
+  ARG: { name: 'Argentina',  flag: '🇦🇷', elo: 2152 },
+  FRA: { name: 'France',     flag: '🇫🇷', elo: 2114 },
+  BRA: { name: 'Brazil',     flag: '🇧🇷', elo: 2091 },
+  ENG: { name: 'England',    flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', elo: 2076 },
+  ESP: { name: 'Spain',      flag: '🇪🇸', elo: 2069 },
+  GER: { name: 'Germany',    flag: '🇩🇪', elo: 2034 },
+  POR: { name: 'Portugal',   flag: '🇵🇹', elo: 2027 },
+  NED: { name: 'Netherlands',flag: '🇳🇱', elo: 2008 },
+  ITA: { name: 'Italy',      flag: '🇮🇹', elo: 1998 },
+  BEL: { name: 'Belgium',    flag: '🇧🇪', elo: 1985 },
+  CRO: { name: 'Croatia',    flag: '🇭🇷', elo: 1977 },
+  URU: { name: 'Uruguay',    flag: '🇺🇾', elo: 1968 },
+  COL: { name: 'Colombia',   flag: '🇨🇴', elo: 1962 },
+  USA: { name: 'USA',        flag: '🇺🇸', elo: 1955 },
+  MEX: { name: 'Mexico',     flag: '🇲🇽', elo: 1948 },
+  SUI: { name: 'Switzerland',flag: '🇨🇭', elo: 1941 },
+  DEN: { name: 'Denmark',    flag: '🇩🇰', elo: 1932 },
+  MAR: { name: 'Morocco',    flag: '🇲🇦', elo: 1928 },
+  JPN: { name: 'Japan',      flag: '🇯🇵', elo: 1925 },
+  SEN: { name: 'Senegal',    flag: '🇸🇳', elo: 1918 },
+  KOR: { name: 'South Korea',flag: '🇰🇷', elo: 1907 },
+  CAN: { name: 'Canada',     flag: '🇨🇦', elo: 1894 },
+  AUS: { name: 'Australia',  flag: '🇦🇺', elo: 1881 },
+  ECU: { name: 'Ecuador',    flag: '🇪🇨', elo: 1876 },
+  POL: { name: 'Poland',     flag: '🇵🇱', elo: 1862 },
+  SRB: { name: 'Serbia',     flag: '🇷🇸', elo: 1848 },
+  AUT: { name: 'Austria',    flag: '🇦🇹', elo: 1843 },
+  WAL: { name: 'Wales',      flag: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', elo: 1828 },
+  TUN: { name: 'Tunisia',    flag: '🇹🇳', elo: 1815 },
+  SCO: { name: 'Scotland',   flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', elo: 1802 },
+  NOR: { name: 'Norway',     flag: '🇳🇴', elo: 1798 },
+  EGY: { name: 'Egypt',      flag: '🇪🇬', elo: 1781 },
+};
+
+/* ----- PROJECTED BRACKET -----
+   16 R32 fixtures with placeholder seeds. These will all be
+   marked TBD until the real draw. For now we use FIFA-rank
+   pairings to seed plausible-looking markets.  */
+const R32_FIXTURES = [
+  // [TeamA, TeamB, kickoff ISO, venue]
+  ['ARG','EGY','2026-06-30T20:00Z','MEX'],
+  ['FRA','SCO','2026-06-30T23:00Z','DAL'],
+  ['BRA','NOR','2026-07-01T20:00Z','NYC'],
+  ['ENG','TUN','2026-07-01T23:00Z','PHL'],
+  ['ESP','WAL','2026-07-02T20:00Z','LAX'],
+  ['GER','AUT','2026-07-02T23:00Z','HOU'],
+  ['POR','SRB','2026-07-03T20:00Z','MIA'],
+  ['NED','POL','2026-07-03T23:00Z','SEA'],
+  ['ITA','ECU','2026-07-04T20:00Z','ATL'],
+  ['BEL','AUS','2026-07-04T23:00Z','TOR'],
+  ['CRO','CAN','2026-07-05T16:00Z','VAN'],
+  ['URU','KOR','2026-07-05T19:00Z','MTY'],
+  ['COL','SEN','2026-07-05T22:00Z','BOS'],
+  ['USA','JPN','2026-07-06T20:00Z','LAX'],
+  ['MEX','MAR','2026-07-06T23:00Z','GDL'],
+  ['SUI','DEN','2026-07-07T20:00Z','KCY'],
+];
+
+const ROUNDS = [
+  { id: 'R32',  label: 'Round of 32',     count: 16 },
+  { id: 'R16',  label: 'Round of 16',     count:  8 },
+  { id: 'QF',   label: 'Quarterfinals',   count:  4 },
+  { id: 'SF',   label: 'Semifinals',      count:  2 },
+  { id: 'F',    label: 'Final',           count:  1 },
+];
+
+const FUTURES_MARKETS = [
+  {
+    id: 'fut.winner', name: 'TOURNAMENT WINNER',
+    desc: 'Wins the WC26 Final on July 19.',
+    candidates: ['ARG','FRA','BRA','ENG','ESP','GER','POR','NED','ITA','BEL','field'],
+  },
+  {
+    id: 'fut.boot', name: 'GOLDEN BOOT',
+    desc: 'Top scorer (or co-leader if tied).',
+    candidates: ['ARG','FRA','BRA','ENG','POR','GER','ESP','field'],
+    // these are "team-of" candidates. At backend we'll switch to player IDs
+    labels: {ARG:'Messi (ARG)',FRA:'Mbappé (FRA)',BRA:'Vinícius (BRA)',ENG:'Kane (ENG)',
+             POR:'Ronaldo (POR)',GER:'Musiala (GER)',ESP:'Yamal (ESP)',field:'Field (Other)'},
+  },
+  {
+    id: 'prop.upper', name: 'CHAMPION FROM UPPER BRACKET',
+    desc: 'Winner emerges from upper half of bracket (fixtures 1–8).',
+    candidates: ['upper','lower'],
+    labels: {upper:'Upper Half', lower:'Lower Half'},
+  },
+  {
+    id: 'prop.uefasf', name: 'ALL-UEFA SEMIFINAL',
+    desc: 'All four semifinalists are UEFA nations.',
+    candidates: ['yes','no'],
+    labels: {yes:'YES', no:'NO'},
+  },
+  {
+    id: 'prop.hostqf', name: 'HOST NATION REACHES QF',
+    desc: 'At least one of USA / Mexico / Canada reaches the quarterfinal.',
+    candidates: ['yes','no'],
+    labels: {yes:'YES', no:'NO'},
+  },
+  {
+    id: 'prop.afrsf', name: 'AFRICAN NATION REACHES SF',
+    desc: 'A CAF nation makes the semifinals.',
+    candidates: ['yes','no'],
+    labels: {yes:'YES', no:'NO'},
+  },
+];
+
+/* ----- BUILD MARKETS PER FIXTURE ----- */
+function fixtureId(i) { return `r32.${String(i+1).padStart(2,'0')}`; }
+
+function buildFixtureMarkets(fx, idx) {
+  const [a, b] = fx;
+  const fid = fixtureId(idx);
+  const winProbA = eloWinProb(TEAMS[a].elo, TEAMS[b].elo);
+  // Account for ~24% draw rate going to ET/pens in regulation
+  // but for binary "who advances", we just split: pA + pB = 1
+  // (penalty coin flip is baked into the FIFA-rank model approx.)
+  return [
+    {
+      id: `${fid}.winner`, fixtureId: fid, type: 'WINNER',
+      name: `MATCH WINNER · ${a} vs ${b}`,
+      desc: 'Who advances. Includes ET / penalties.',
+      outcomes: [
+        { id: `${fid}.winner.a`, teamCode: a, label: TEAMS[a].name, prior: winProbA },
+        { id: `${fid}.winner.b`, teamCode: b, label: TEAMS[b].name, prior: 1 - winProbA },
+      ],
+    },
+    {
+      id: `${fid}.ou`, fixtureId: fid, type: 'OU',
+      name: `TOTAL GOALS O/U 2.5`,
+      desc: 'Combined goals in regulation.',
+      outcomes: [
+        { id: `${fid}.ou.over`,  label: 'OVER 2.5',  sub:'3+ goals', prior: 0.51 },
+        { id: `${fid}.ou.under`, label: 'UNDER 2.5', sub:'0-2 goals',prior: 0.49 },
+      ],
+    },
+    {
+      id: `${fid}.btts`, fixtureId: fid, type: 'BTTS',
+      name: `BOTH TEAMS TO SCORE`,
+      desc: 'Each side scores at least once in regulation.',
+      outcomes: [
+        { id: `${fid}.btts.yes`, label: 'YES', prior: 0.53 },
+        { id: `${fid}.btts.no`,  label: 'NO',  prior: 0.47 },
+      ],
+    },
+    {
+      id: `${fid}.method`, fixtureId: fid, type: 'METHOD',
+      name: `METHOD OF DECISION`,
+      desc: 'Regulation / extra time / penalty shootout.',
+      outcomes: [
+        { id: `${fid}.method.reg`, label: 'REGULATION', prior: 0.76 },
+        { id: `${fid}.method.et`,  label: 'EXTRA TIME', prior: 0.16 },
+        { id: `${fid}.method.pen`, label: 'PENALTIES',  prior: 0.08 },
+      ],
+    },
+  ];
+}
+
+function buildFuturesMarket(m) {
+  // Outcomes equally distributed normalized priors based on team Elo if applicable
+  let outcomes;
+  if (m.id === 'fut.winner' || m.id === 'fut.boot') {
+    const cands = m.candidates;
+    // weight = exp(elo/400) for actual teams; field gets fixed share
+    const weights = cands.map(c => c === 'field' ? null : Math.exp(TEAMS[c].elo / 400));
+    const fieldShare = 0.10;
+    const knownTotal = weights.reduce((s,w) => s + (w || 0), 0);
+    outcomes = cands.map((c, i) => {
+      let prior;
+      if (c === 'field') prior = fieldShare;
+      else prior = (weights[i] / knownTotal) * (1 - fieldShare);
+      const lab = m.labels?.[c] ?? (TEAMS[c]?.name || c);
+      return { id: `${m.id}.${c}`, teamCode: c === 'field' ? null : c, label: lab, prior };
+    });
+  } else {
+    // Binary props with hand-tuned reasonable defaults
+    const defaults = {
+      'prop.upper':   { upper: 0.50, lower: 0.50 },
+      'prop.uefasf':  { yes: 0.38,   no: 0.62 },
+      'prop.hostqf':  { yes: 0.28,   no: 0.72 },
+      'prop.afrsf':   { yes: 0.22,   no: 0.78 },
+    }[m.id];
+    outcomes = m.candidates.map(c => ({
+      id: `${m.id}.${c}`,
+      label: m.labels?.[c] ?? c,
+      prior: defaults[c],
+    }));
+  }
+  return {
+    id: m.id, type: 'FUTURE', name: m.name, desc: m.desc, outcomes,
+  };
+}
+
+function eloWinProb(elo1, elo2) {
+  return 1 / (1 + Math.pow(10, (elo2 - elo1) / 400));
+}
+
+/* ----- BUILD ALL MARKETS ----- */
+/* =================================================================
+   CATALOG: loaded from Supabase (fixtures + markets), replacing the
+   hardcoded projected bracket. Render functions read from here.
+   ================================================================= */
+let CATALOG = { fixtures: [], futures: [] };
+
+const STAGE_ORDER = { GROUP: 0, R32: 1, R16: 2, QF: 3, SF: 4, '3P': 5, F: 6 };
+const STAGE_LABEL = { GROUP: 'GROUP STAGE', R32: 'ROUND OF 32', R16: 'ROUND OF 16', QF: 'QUARTERFINALS', SF: 'SEMIFINALS', '3P': 'THIRD PLACE', F: 'FINAL' };
+const TYPE_ORDER  = { RESULT: 0, WINNER: 0, OU: 1, BTTS: 2, METHOD: 3 };
+
+function marketTypeFromGroupKey(gk) {
+  const seg = (gk || '').split('.').pop();
+  return ({ result: 'RESULT', winner: 'WINNER', ou: 'OU', btts: 'BTTS', method: 'METHOD' }[seg]) || 'FUTURE';
+}
+function tabLabel(type) {
+  return ({ RESULT: 'RESULT', WINNER: 'WINNER', OU: 'GOALS O/U', BTTS: 'BTTS', METHOD: 'METHOD' }[type]) || type;
+}
+
+// Team display helpers. Emoji flag where known, else just the code.
+function flagFor(code) {
+  if (!code) return '⚽';
+  return FLAGS[code] || (TEAMS[code] && TEAMS[code].flag) || '⚽';
+}
+function teamName(code) { return (TEAMS[code] && TEAMS[code].name) ? TEAMS[code].name : code; }
+
+async function loadCatalog() {
+  const [{ data: fxs }, { data: mkts }] = await Promise.all([
+    sb.from('fixtures').select('id,stage,matchday,team_a,team_b,kickoff_at,venue,status').order('kickoff_at', { ascending: true }),
+    sb.from('markets').select('id,fixture_id,outcome_label,team_code,group_key,description,last_px'),
+  ]);
+  // Build groups (a frontend "market" == one group_key, outcomes == its rows)
+  const groups = {};
+  for (const r of (mkts || [])) {
+    const gk = r.group_key;
+    if (!groups[gk]) {
+      groups[gk] = {
+        id: gk, type: marketTypeFromGroupKey(gk),
+        name: '', desc: r.description || '', fixtureId: r.fixture_id, outcomes: [],
+      };
+    }
+    groups[gk].outcomes.push({
+      id: r.id, label: r.outcome_label, teamCode: r.team_code,
+      sub: null, prior: (r.last_px != null ? r.last_px / 100 : 0.5),
+    });
+  }
+  // Name each group from its type
+  for (const g of Object.values(groups)) {
+    g.name = ({ RESULT: 'MATCH RESULT', WINNER: 'MATCH WINNER', OU: 'TOTAL GOALS O/U 2.5', BTTS: 'BOTH TEAMS TO SCORE', METHOD: 'METHOD OF DECISION' }[g.type])
+      || ({ 'fut.boot': 'GOLDEN BOOT', 'fut.winner': 'TOURNAMENT WINNER', 'prop.upper': 'UPPER/LOWER BRACKET', 'prop.uefasf': 'ALL-UEFA SEMIFINAL', 'prop.hostqf': 'HOST QUARTERFINAL', 'prop.afrsf': 'AFRICAN SEMIFINALIST' }[g.id])
+      || g.desc || g.id;
+  }
+  // Sort outcomes inside each group deterministically (markets query has no implicit order).
+  // result: home, draw, away · winner: a, b · ou: over, under · btts: yes, no · method: reg, et, pen
+  const SUFFIX_RANK = { home: 0, draw: 1, away: 2, a: 0, b: 1, over: 0, under: 1, yes: 0, no: 1, reg: 0, et: 1, pen: 2 };
+  for (const g of Object.values(groups)) {
+    g.outcomes.sort((x, y) => {
+      const sx = (x.id.split('.').pop() || '').toLowerCase();
+      const sy = (y.id.split('.').pop() || '').toLowerCase();
+      return (SUFFIX_RANK[sx] ?? 99) - (SUFFIX_RANK[sy] ?? 99);
+    });
+  }
+  // Only real synced fixtures (ids start with 'f'); attach their markets, sorted by type
+  const fixtures = (fxs || []).filter(f => /^f\d/.test(f.id)).map(f => ({
+    id: f.id, stage: f.stage || 'GROUP', matchday: f.matchday,
+    teamA: f.team_a, teamB: f.team_b, kickoff: f.kickoff_at, venue: f.venue, status: f.status,
+    markets: Object.values(groups)
+      .filter(g => g.fixtureId === f.id)
+      .sort((a, b) => (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9)),
+  }));
+  const futures = Object.values(groups).filter(g => g.fixtureId == null);
+  CATALOG = { fixtures, futures };
+
+  // Ensure the selected view points at something that still exists
+  const ids = new Set(fixtures.map(f => f.id));
+  if (state.selectedView.type === 'fixture' && !ids.has(state.selectedView.id)) {
+    if (fixtures.length) state.selectedView = { type: 'fixture', id: fixtures[0].id, tab: fixtures[0].markets[0]?.type || 'RESULT' };
+  }
+}
+
+function getAllFixtures() { return CATALOG.fixtures; }
+function getAllFuturesMarkets() { return CATALOG.futures; }
+
+function getMarketById(mid) {
+  for (const fx of CATALOG.fixtures) {
+    const m = fx.markets.find(x => x.id === mid);
+    if (m) return { market: m, fixture: fx };
+  }
+  for (const m of CATALOG.futures) if (m.id === mid) return { market: m, fixture: null };
+  return null;
+}
+function getAllMarkets() {
+  const all = [];
+  for (const fx of CATALOG.fixtures) all.push(...fx.markets);
+  all.push(...CATALOG.futures);
+  return all;
+}
+function getAllOutcomes() {
+  return getAllMarkets().flatMap(m => m.outcomes.map(o => ({ outcome: o, market: m })));
+}
+
+/* ----- STATE / STORAGE ----- */
+let state = defaultState();
+
+function defaultState() {
+  let savedView = { type: 'fixture', id: fixtureId(0), tab: 'WINNER' };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const s = JSON.parse(raw); if (s.selectedView) savedView = s.selectedView; }
+  } catch (e) {}
+  return {
+    bankroll: STARTING_BANKROLL,
+    realized: 0,
+    positions: {},   // hydrated from Supabase
+    books: {},       // outcomeId -> { bids:[{px,qty}], asks:[{px,qty}] } (top-of-book + on-demand depth)
+    lastPx: {},      // hydrated from markets.last_px
+    pxHist: {},      // built up locally from realtime fills
+    tape: [],        // hydrated from fills, appended via realtime
+    openOrders: [],  // hydrated from orders table; refreshed via realtime
+    pendingResults: [], // admin: pending results for settlement
+    selectedView: savedView,
+    trader: null,    // { name, linkedin } from public.users
+    tradeCount: 0,
+    leaderboard: [], // hydrated from leaderboard view
+    settled: false,
+  };
+}
+
+// We only persist selectedView locally now; everything else lives in Supabase.
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ selectedView: state.selectedView })); } catch(e){}
+}
+
+function seedBooks(s) { return s; } // no-op: books come from Supabase now
+
+/* =================================================================
+   SUPABASE DATA LAYER
+   All reads hydrate the `state` cache, then call the existing
+   synchronous render functions. All writes go through RPCs.
+   ================================================================= */
+
+async function loadMe() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return false;
+  const { data, error } = await sb.from('users').select('*').eq('id', user.id).single();
+  if (error || !data) return false;
+  state.trader     = { name: data.display_name, linkedin: data.linkedin_url, id: user.id, isAdmin: data.is_admin };
+  state.bankroll   = data.bankroll_c / 100;
+  state.realized   = data.realized_c / 100;
+  state.tradeCount = data.trade_count;
+  return true;
+}
+
+async function loadMarketsTopOfBook() {
+  const { data, error } = await sb.from('markets').select('id,last_px,best_bid,best_ask');
+  if (error || !data) return;
+  for (const m of data) {
+    if (m.last_px != null) {
+      state.lastPx[m.id] = m.last_px;
+      if (!state.pxHist[m.id]) state.pxHist[m.id] = [m.last_px];
+    }
+    state.books[m.id] = {
+      bids: m.best_bid != null ? [{ px: m.best_bid, qty: 0 }] : [],
+      asks: m.best_ask != null ? [{ px: m.best_ask, qty: 0 }] : [],
+    };
+  }
+}
+
+// Full depth for one market (used when opening the trade modal / book peek)
+async function loadBookDepth(oid) {
+  const { data, error } = await sb.rpc('get_order_book', { p_market_id: oid, p_levels: 6 });
+  if (error || !data) return;
+  state.books[oid] = {
+    bids: (data.bids || []).map(b => ({ px: b.px, qty: b.qty })),
+    asks: (data.asks || []).map(a => ({ px: a.px, qty: a.qty })),
+  };
+}
+
+async function loadPositions() {
+  if (!state.trader) return;
+  const { data, error } = await sb.from('positions').select('*').eq('user_id', state.trader.id);
+  if (error) return;
+  state.positions = {};
+  for (const p of (data || [])) {
+    state.positions[p.market_id] = { shares: p.shares, avgCost: Number(p.avg_cost_c) };
+  }
+}
+
+async function loadOpenOrders() {
+  if (!state.trader) { state.openOrders = []; return; }
+  const { data, error } = await sb.from('orders')
+    .select('id, market_id, side, limit_px, qty, filled_qty, remaining_qty, status, created_at')
+    .eq('user_id', state.trader.id)
+    .in('status', ['OPEN', 'PARTIAL'])
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error || !data) { state.openOrders = []; return; }
+  state.openOrders = data;
+}
+
+async function loadTape() {
+  const { data, error } = await sb.from('fills')
+    .select('market_id,price_c,qty,taker_side,created_at')
+    .order('created_at', { ascending: false }).limit(50);
+  if (error || !data) return;
+  state.tape = data.map(f => ({
+    oid: f.market_id, px: f.price_c, qty: f.qty,
+    side: f.taker_side, ts: Date.parse(f.created_at),
+  }));
+}
+
+async function loadLeaderboard() {
+  const { data, error } = await sb.from('leaderboard')
+    .select('display_name,linkedin_url,realized_c,rank')
+    .order('rank', { ascending: true }).limit(10);
+  if (error || !data) { state.leaderboard = []; renderLeaderboard(); return; }
+  const myName = state.trader ? state.trader.name : null;
+  state.leaderboard = data.map(r => ({
+    name: r.display_name,
+    linkedin: r.linkedin_url,
+    realized: r.realized_c / 100,
+    me: myName && r.display_name === myName,
+  }));
+  renderLeaderboard();
+}
+
+async function loadFillHistory() {
+  // Seed pxHist from recent fills so sparklines aren't blank after a reload.
+  // Cap is per-market via pxHist.length <= 60; one query covers all markets.
+  const { data, error } = await sb.from('fills')
+    .select('market_id,price_c,created_at')
+    .order('created_at', { ascending: true })
+    .limit(800);
+  if (error || !data) return;
+  state.pxHist = {};
+  for (const f of data) {
+    if (!state.pxHist[f.market_id]) state.pxHist[f.market_id] = [];
+    state.pxHist[f.market_id].push(f.price_c);
+    if (state.pxHist[f.market_id].length > 60) state.pxHist[f.market_id].shift();
+  }
+}
+
+async function hydrateAll() {
+  await loadCatalog();
+  await loadMe();
+  await loadMarketsTopOfBook();
+  await loadFillHistory();
+  await loadPositions();
+  await loadOpenOrders();
+  await loadTape();
+  await loadLeaderboard();
+  await loadPendingResults();
+  initRender();
+  renderTopBoard();
+  renderAdminPanel();
+  updateAuthUI();
+}
+
+/* ----- AUTH-AWARE TOP BUTTON ----- */
+function updateAuthUI() {
+  const btn = $('#signupBtn');
+  if (!btn) return;
+  if (state.trader) {
+    btn.textContent = '👤 ' + state.trader.name;
+    btn.onclick = openProfileModal;
+  } else {
+    btn.textContent = 'SIGN UP →';
+    btn.onclick = () => $('#signupModal').classList.add('open');
+  }
+}
+
+/* ----- PROFILE / MY TRADES ----- */
+async function loadMyTrades() {
+  if (!state.trader) return [];
+  // Fills where the user is on either side (taker or maker)
+  const { data, error } = await sb.from('fills')
+    .select('market_id,price_c,qty,taker_side,taker_user_id,created_at')
+    .or(`taker_user_id.eq.${state.trader.id},maker_user_id.eq.${state.trader.id}`)
+    .order('created_at', { ascending: false }).limit(40);
+  if (error || !data) return [];
+  return data.map(f => ({
+    oid: f.market_id, px: f.price_c, qty: f.qty,
+    // From the user's perspective: if they were the taker, their side is taker_side;
+    // if they were the maker, their side is the opposite.
+    side: f.taker_user_id === state.trader.id ? f.taker_side : (f.taker_side === 'BUY' ? 'SELL' : 'BUY'),
+    role: f.taker_user_id === state.trader.id ? 'taker' : 'maker',
+    ts: Date.parse(f.created_at),
+  }));
+}
+
+async function openProfileModal() {
+  if (!state.trader) { $('#signupModal').classList.add('open'); return; }
+  await loadMe();
+  await loadPositions();
+  await loadLeaderboard();
+
+  $('#pfName').textContent = state.trader.name;
+  $('#pfLinkedin').textContent = state.trader.linkedin || '';
+  $('#pfRealized').textContent = (state.realized >= 0 ? '+' : '') + fmtMoney(state.realized);
+  $('#pfRealized').style.color = state.realized >= 0 ? '#4ade80' : 'var(--maple)';
+  $('#pfOpen').textContent = (openPnl() >= 0 ? '+' : '') + fmtMoney(openPnl());
+  $('#pfBankroll').textContent = fmtMoney(state.bankroll);
+  $('#pfTrades').textContent = state.tradeCount;
+  const myRank = (state.leaderboard.findIndex(r => r.me) + 1) || '—';
+  $('#pfRank').textContent = myRank === '—' ? '—' : '#' + myRank;
+
+  // Label map for market names
+  const labelMap = {};
+  const fixMap = {};
+  (CATALOG.fixtures || []).forEach(f => { fixMap[f.id] = f; });
+  getAllOutcomes().forEach(({ outcome, market }) => {
+    const fx = fixMap[market.fixtureId];
+    const fxLabel = fx ? `${fx.teamA} v ${fx.teamB}` : '';
+    labelMap[outcome.id] = { mktName: market.name, label: outcome.label, fxLabel };
+  });
+
+  // Positions
+  const posIds = Object.keys(state.positions);
+  $('#pfPositions').innerHTML = posIds.length ? posIds.map(oid => {
+    const p = state.positions[oid];
+    const meta = labelMap[oid] || { label: oid, mktName: '' };
+    const dir = p.shares > 0 ? 'YES' : 'NO';
+    const dirColor = dir === 'YES' ? 'var(--liberty-soft)' : 'var(--maple)';
+    const mark = markPx(oid);
+    let pnl = p.shares > 0 ? (mark - p.avgCost) * p.shares / 100 : (p.avgCost - mark) * Math.abs(p.shares) / 100;
+    const pnlCls = pnl > 0.005 ? 'pos' : pnl < -0.005 ? 'neg' : '';
+    return `<div class="pos">
+      <div><div class="pos-l1">${escapeHtml(meta.label)}</div>
+      <div class="pos-l2">${escapeHtml(meta.mktName)} · <span style="color:${dirColor}">${Math.abs(p.shares)} ${dir}</span> @ ${p.avgCost.toFixed(1)}¢</div></div>
+      <div class="pos-pnl ${pnlCls}">${pnl >= 0 ? '+' : ''}${fmtMoney(pnl)}</div>
+    </div>`;
+  }).join('') : `<div class="pos-empty">No open positions.</div>`;
+
+  // Trades
+  const trades = await loadMyTrades();
+  $('#pfTrades2').innerHTML = trades.length ? trades.map(t => {
+    const meta = labelMap[t.oid] || { label: t.oid, mktName: '' };
+    return `<div class="tape">
+      <span class="tape-side ${t.side === 'BUY' ? 'buy' : 'sell'}">${t.side}</span>
+      <div class="tape-name">${escapeHtml(meta.label)}<small>${meta.fxLabel ? escapeHtml(meta.fxLabel) + ' · ' : ''}${escapeHtml(meta.mktName)} · ${t.role}</small></div>
+      <div><div class="tape-px">${t.qty} @ ${t.px}¢</div><div class="tape-time">${tAgo(t.ts)}</div></div>
+    </div>`;
+  }).join('') : `<div class="pos-empty">No trades yet.</div>`;
+
+  $('#profileModal').classList.add('open');
+}
+
+/* ----- WRITE PATH ----- */
+async function placeOrderRPC(oid, side, limitPx, qty) {
+  const { data, error } = await sb.rpc('place_order', {
+    p_market_id: oid, p_side: side, p_limit_px: limitPx, p_qty: qty,
+  });
+  if (error) throw error;
+  return data; // { order_id, filled_qty, remaining_qty, avg_fill_px, refund_c, fills, status }
+}
+
+/* ----- REALTIME ----- */
+function subscribeRealtime() {
+  if (RT) return;
+  const userId = state.trader && state.trader.id;
+  RT = sb.channel('wc26x')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'fills' }, payload => {
+      const f = payload.new;
+      state.tape.unshift({ oid: f.market_id, px: f.price_c, qty: f.qty, side: f.taker_side, ts: Date.parse(f.created_at) });
+      if (state.tape.length > 80) state.tape.pop();
+      state.lastPx[f.market_id] = f.price_c;
+      if (!state.pxHist[f.market_id]) state.pxHist[f.market_id] = [];
+      state.pxHist[f.market_id].push(f.price_c);
+      if (state.pxHist[f.market_id].length > 60) state.pxHist[f.market_id].shift();
+      renderTape(); renderMarkets(); renderPaTicker();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'markets' }, payload => {
+      const m = payload.new;
+      if (m.last_px != null) state.lastPx[m.id] = m.last_px;
+      state.books[m.id] = {
+        bids: m.best_bid != null ? [{ px: m.best_bid, qty: 0 }] : [],
+        asks: m.best_ask != null ? [{ px: m.best_ask, qty: 0 }] : [],
+      };
+      renderMarkets(); renderPaTicker();
+    });
+
+  // My own state. Fires when another user's trade matches my resting order,
+  // or when any of my fields change server-side. Without this the user sees
+  // stale positions/bankroll until they reload.
+  if (userId) {
+    RT
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'positions', filter: `user_id=eq.${userId}` }, async () => {
+        await loadPositions();
+        renderPositions();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${userId}` }, async () => {
+        await loadOpenOrders();
+        renderOpenOrders();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` }, payload => {
+        const u = payload.new;
+        state.bankroll = u.bankroll_c / 100;
+        state.realized = u.realized_c / 100;
+        state.tradeCount = u.trade_count;
+        renderTopBoard();
+      });
+  }
+
+  // Leaderboard: any user's realized changing can re-rank, so refresh on any
+  // public.users update. Debounced to avoid hammering on bursts of fills.
+  let lbTimer = null;
+  RT.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, () => {
+    clearTimeout(lbTimer);
+    lbTimer = setTimeout(() => loadLeaderboard(), 800);
+  });
+
+  RT.subscribe();
+}
+
+function makeSyntheticBook(midPx) {
+  const spread = midPx < 10 || midPx > 90 ? 4 : 2;
+  const bids = [], asks = [];
+  for (let i = 0; i < 4; i++) {
+    const bP = clampPx(midPx - Math.floor(spread/2) - i);
+    const aP = clampPx(midPx + Math.ceil(spread/2) + i);
+    if (bP >= 1) bids.push({ px: bP, qty: 100 + Math.floor(Math.random()*200) + i*80, ts: Date.now()-i, mine: false });
+    if (aP <= 99) asks.push({ px: aP, qty: 100 + Math.floor(Math.random()*200) + i*80, ts: Date.now()-i, mine: false });
+  }
+  return { bids, asks };
+}
+function clampPx(p) { return Math.max(1, Math.min(99, p)); }
+
+/* ----- BOOK ENGINE ----- */
+function bestBid(oid){ const b=state.books[oid]?.bids; return b&&b.length?b[0].px:null; }
+function bestAsk(oid){ const a=state.books[oid]?.asks; return a&&a.length?a[0].px:null; }
+function midPx(oid){ const b=bestBid(oid), a=bestAsk(oid);
+  if (b!=null && a!=null) return (a+b)/2;
+  return state.lastPx[oid] ?? 50;
+}
+function markPx(oid){ return state.lastPx[oid] ?? midPx(oid); }
+function sortBook(oid){
+  const bk=state.books[oid];
+  bk.bids.sort((x,y)=>y.px-x.px || x.ts-y.ts);
+  bk.asks.sort((x,y)=>x.px-y.px || x.ts-y.ts);
+}
+
+function submitOrder(oid, side, limitPx, qty) {
+  sortBook(oid);
+  const bk = state.books[oid];
+  let remaining = qty, totalFillCents = 0, filledQty = 0;
+  if (side === 'BUY') {
+    while (remaining > 0 && bk.asks.length && bk.asks[0].px <= limitPx) {
+      const lvl = bk.asks[0];
+      const take = Math.min(remaining, lvl.qty);
+      totalFillCents += take * lvl.px;
+      remaining -= take; filledQty += take; lvl.qty -= take;
+      recordPrint(oid, lvl.px, take, 'BUY');
+      if (lvl.qty <= 0) bk.asks.shift();
+    }
+    if (remaining > 0) { bk.bids.push({ px: limitPx, qty: remaining, ts: Date.now(), mine: true }); sortBook(oid); }
+  } else {
+    while (remaining > 0 && bk.bids.length && bk.bids[0].px >= limitPx) {
+      const lvl = bk.bids[0];
+      const take = Math.min(remaining, lvl.qty);
+      totalFillCents += take * lvl.px;
+      remaining -= take; filledQty += take; lvl.qty -= take;
+      recordPrint(oid, lvl.px, take, 'SELL');
+      if (lvl.qty <= 0) bk.bids.shift();
+    }
+    if (remaining > 0) { bk.asks.push({ px: limitPx, qty: remaining, ts: Date.now(), mine: true }); sortBook(oid); }
+  }
+  return { filledQty, restQty: remaining, avgFillPx: filledQty > 0 ? totalFillCents/filledQty : null, debit: totalFillCents };
+}
+
+function recordPrint(oid, px, qty, side) {
+  state.lastPx[oid] = px;
+  if (!state.pxHist[oid]) state.pxHist[oid] = [];
+  state.pxHist[oid].push(px);
+  if (state.pxHist[oid].length > 60) state.pxHist[oid].shift();
+  state.tape.unshift({ oid, px, qty, side, ts: Date.now() });
+  if (state.tape.length > 80) state.tape.pop();
+}
+
+function dryRunOrder(oid, side, limitPx, qty) {
+  const bk = state.books[oid];
+  let remaining = qty, totalFillCents = 0, filledQty = 0;
+  const arr = side === 'BUY' ? bk.asks : bk.bids;
+  for (let i = 0; i < arr.length && remaining > 0; i++) {
+    const lvl = arr[i];
+    const ok = side === 'BUY' ? lvl.px <= limitPx : lvl.px >= limitPx;
+    if (!ok) break;
+    const take = Math.min(remaining, lvl.qty);
+    totalFillCents += take * lvl.px; remaining -= take; filledQty += take;
+  }
+  return { filledQty, restQty: remaining, avgFillPx: filledQty > 0 ? totalFillCents/filledQty : 0, totalFillCents };
+}
+
+/* ----- POSITIONS / PNL ----- */
+function applyFill(oid, sideEff, fillQty, avgFillPxCents) {
+  const sign = sideEff === 'LONG_YES' ? 1 : -1;
+  const dShares = sign * fillQty;
+  let pos = state.positions[oid] || { shares: 0, avgCost: 0 };
+  const oldShares = pos.shares;
+  const newShares = oldShares + dShares;
+  if (oldShares === 0 || Math.sign(oldShares) === sign) {
+    const oldNotional = Math.abs(oldShares) * pos.avgCost;
+    const addNotional = fillQty * avgFillPxCents;
+    pos.shares = newShares;
+    pos.avgCost = Math.abs(newShares) > 0 ? (oldNotional + addNotional) / Math.abs(newShares) : 0;
+  } else {
+    const closingQty = Math.min(Math.abs(oldShares), fillQty);
+    let realizedCents;
+    if (oldShares > 0) realizedCents = (avgFillPxCents - pos.avgCost) * closingQty;
+    else realizedCents = (pos.avgCost - avgFillPxCents) * closingQty;
+    state.realized += realizedCents / 100;
+    pos.shares = newShares;
+    if (Math.abs(pos.shares) === 0) pos.avgCost = 0;
+    else if (fillQty - closingQty > 0) pos.avgCost = avgFillPxCents;
+  }
+  if (pos.shares === 0) delete state.positions[oid];
+  else state.positions[oid] = pos;
+}
+
+function openPnl() {
+  let total = 0;
+  for (const oid in state.positions) {
+    const p = state.positions[oid];
+    const mark = markPx(oid);
+    if (p.shares > 0) total += (mark - p.avgCost) * p.shares / 100;
+    else total += (p.avgCost - mark) * Math.abs(p.shares) / 100;
+  }
+  return total;
+}
+
+/* ----- HASH CHAIN ----- */
+async function hmacSha256Hex(key, msg) {
+  if (window.crypto && window.crypto.subtle) {
+    const enc = new TextEncoder();
+    const k = await window.crypto.subtle.importKey('raw', enc.encode(key), { name:'HMAC', hash:'SHA-256' }, false, ['sign']);
+    const sig = await window.crypto.subtle.sign('HMAC', k, enc.encode(msg));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+  let h = 5381;
+  const s = key + '|' + msg;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
+  return Math.abs(h).toString(16);
+}
+async function chainAppend(prev, payload) {
+  return hmacSha256Hex(CHAIN_SECRET, (prev || 'GENESIS') + '|' + JSON.stringify(payload));
+}
+
+/* =================================================================
+   SPLIT-FLAP BOARD COMPONENT
+   ================================================================= */
+const FLIP_STATE = new Map(); // cellEl -> currentGlyph
+
+function initFlipboard(el, length, size='') {
+  el.innerHTML = '';
+  for (let i = 0; i < length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'flip-cell' + (size ? ' ' + size : '');
+    cell.innerHTML = `
+      <div class="top"><div class="glyph"></div></div>
+      <div class="bottom"><div class="glyph"></div></div>
+      <div class="flap-top"><div class="glyph"></div></div>
+      <div class="flap-bottom"><div class="glyph"></div></div>
+    `;
+    el.appendChild(cell);
+    FLIP_STATE.set(cell, ' ');
+  }
+}
+
+function setFlipboardText(el, text) {
+  const cells = el.querySelectorAll('.flip-cell');
+  // Right-align text into cell array
+  const chars = text.split('');
+  while (chars.length < cells.length) chars.unshift(' ');
+  while (chars.length > cells.length) chars.shift();
+  cells.forEach((cell, i) => {
+    const next = chars[i];
+    const cur = FLIP_STATE.get(cell);
+    if (cur === next) return;
+    flipCell(cell, cur, next);
+    FLIP_STATE.set(cell, next);
+  });
+}
+
+function flipCell(cell, fromGlyph, toGlyph) {
+  // Set static halves to next glyph; animate flaps from old to new
+  const top    = cell.querySelector('.top .glyph');
+  const bottom = cell.querySelector('.bottom .glyph');
+  const ftop   = cell.querySelector('.flap-top .glyph');
+  const fbot   = cell.querySelector('.flap-bottom .glyph');
+
+  // Static halves show the new glyph (revealed underneath the animating flaps)
+  top.textContent = toGlyph;
+  bottom.textContent = toGlyph;
+  // Top flap starts showing OLD glyph (it will rotate down out of view)
+  ftop.textContent = fromGlyph;
+  // Bottom flap shows NEW glyph (rotates up into place)
+  fbot.textContent = toGlyph;
+
+  // Reset animation by toggling class
+  cell.classList.remove('flipping');
+  void cell.offsetWidth;
+  cell.classList.add('flipping');
+  setTimeout(() => {
+    // Before the animation's hidden-state is dropped, point the top flap at the
+    // NEW glyph. Otherwise it reappears showing the OLD glyph and the cell ends
+    // up half-old/half-new (the "garbled board" bug).
+    ftop.textContent = toGlyph;
+    cell.classList.remove('flipping');
+  }, 920);
+}
+
+/* =================================================================
+   RENDER
+   ================================================================= */
+const $ = (s) => document.querySelector(s);
+
+function renderTopBoard() {
+  // Bankroll: "10,000" format → "10000" → flipped as 6 chars max
+  // Realized: signed, 6 chars with sign
+  // Open: signed, 6 chars with sign
+  // Trades: 3 chars
+  const b = Math.max(0, Math.round(state.bankroll));
+  const r = Math.round(state.realized);
+  const o = Math.round(openPnl());
+  const t = state.tradeCount;
+
+  const bkEl = $('#boardBankroll');
+  const reEl = $('#boardRealized');
+  const opEl = $('#boardOpen');
+  const trEl = $('#boardTrades');
+  if (!bkEl.children.length) initFlipboard(bkEl, 6);
+  if (!reEl.children.length) initFlipboard(reEl, 6);
+  if (!opEl.children.length) initFlipboard(opEl, 6);
+  if (!trEl.children.length) initFlipboard(trEl, 3);
+
+  setFlipboardText(bkEl, String(b).padStart(6,' '));
+  setFlipboardText(reEl, fmtSigned(r, 6));
+  setFlipboardText(opEl, fmtSigned(o, 6));
+  setFlipboardText(trEl, String(t).padStart(3,' '));
+
+  // Badge flips to LIVE once markets open
+  const badge = document.getElementById('liveBadge');
+  if (badge) {
+    const isLive = Date.now() >= MARKETS_OPEN_MS;
+    badge.innerHTML = isLive
+      ? '<span class="live-dot"></span>LIVE'
+      : '<span class="live-dot"></span>PRE-LAUNCH';
+    badge.style.background = isLive ? 'var(--liberty-soft)' : '';
+    badge.style.color = isLive ? 'var(--turf-deep)' : '';
+  }
+}
+
+function fmtSigned(n, w) {
+  const sign = n < 0 ? '-' : (n > 0 ? '+' : ' ');
+  const s = sign + Math.abs(n);
+  return s.padStart(w, ' ');
+}
+
+function renderBracketNav() {
+  const fxs = getAllFixtures();
+  const cur = state.selectedView;
+  if (!fxs.length) { $('#bracketNav').innerHTML = `<div class="nav-footer">Loading fixtures…</div>`; return; }
+
+  // Group fixtures by stage, and within GROUP by matchday
+  const byStage = {};
+  for (const fx of fxs) {
+    const key = fx.stage === 'GROUP' ? `GROUP·${fx.matchday || 0}` : fx.stage;
+    (byStage[key] = byStage[key] || []).push(fx);
+  }
+  const sortedKeys = Object.keys(byStage).sort((a, b) => {
+    const sa = a.split('·'), sb_ = b.split('·');
+    const d = (STAGE_ORDER[sa[0]] ?? 9) - (STAGE_ORDER[sb_[0]] ?? 9);
+    return d !== 0 ? d : (parseInt(sa[1]||'0') - parseInt(sb_[1]||'0'));
+  });
+
+  let html = '';
+  for (const key of sortedKeys) {
+    const [stage, md] = key.split('·');
+    const heading = stage === 'GROUP' ? `GROUP STAGE · MD${md}` : STAGE_LABEL[stage] || stage;
+    html += `<div class="nav-head" style="font-size:12px;padding-top:12px">${heading}</div><div class="round-block">`;
+    html += byStage[key].map(fx => {
+      const active = cur.type === 'fixture' && cur.id === fx.id ? 'active' : '';
+      const sep = fx.stage === 'GROUP' ? '–' : 'vs';
+      return `
+        <div class="round-fixture ${active}" data-fid="${fx.id}">
+          <div class="rf-teams">
+            <span class="rf-flag">${flagFor(fx.teamA)}</span>
+            <span>${fx.teamA}</span>
+            <span class="rf-vs">${sep}</span>
+            <span>${fx.teamB}</span>
+            <span class="rf-flag">${flagFor(fx.teamB)}</span>
+          </div>
+          <div class="rf-meta">
+            <span>${fx.venue || ''}</span>
+            <span>${new Date(fx.kickoff).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          </div>
+        </div>`;
+    }).join('');
+    html += `</div>`;
+  }
+  $('#bracketNav').innerHTML = html;
+  $('#bracketNav').querySelectorAll('.round-fixture').forEach(el => {
+    el.onclick = () => {
+      const fx = getAllFixtures().find(f => f.id === el.dataset.fid);
+      const firstTab = fx && fx.markets[0] ? fx.markets[0].type : 'RESULT';
+      state.selectedView = { type: 'fixture', id: el.dataset.fid, tab: firstTab };
+      saveState(); renderAll();
+    };
+  });
+}
+
+function renderFuturesNav() {
+  const cur = state.selectedView;
+  const futures = getAllFuturesMarkets();
+  if (!futures.length) { $('#futuresNav').innerHTML = `<div class="nav-footer">No futures markets.</div>`; return; }
+  const items = futures.map(m => {
+    const active = cur.type === 'future' && cur.id === m.id ? 'active' : '';
+    return `
+      <div class="future-item ${active}" data-fid="${m.id}">
+        <div class="fi-name">${m.name}</div>
+        <div class="fi-sub">${m.desc || ''}</div>
+      </div>`;
+  }).join('');
+  $('#futuresNav').innerHTML = items;
+  $('#futuresNav').querySelectorAll('.future-item').forEach(el => {
+    el.onclick = () => {
+      state.selectedView = { type: 'future', id: el.dataset.fid, tab: 'FUTURE' };
+      saveState(); renderAll();
+    };
+  });
+}
+
+function currentSelection() {
+  const cur = state.selectedView;
+  if (cur.type === 'fixture') {
+    const fx = getAllFixtures().find(x => x.id === cur.id);
+    return { type: 'fixture', fixture: fx, tab: cur.tab };
+  } else {
+    const m = getAllFuturesMarkets().find(x => x.id === cur.id);
+    return { type: 'future', market: m };
+  }
+}
+
+function renderFixtureHeader() {
+  const sel = currentSelection();
+  const root = $('#fixtureHeader');
+  if (sel.type === 'fixture' && sel.fixture) {
+    const fx = sel.fixture;
+    const kickoff = new Date(fx.kickoff).toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+    const stageLabel = fx.stage === 'GROUP'
+      ? `GROUP STAGE · MATCHDAY ${fx.matchday || '—'}`
+      : (STAGE_LABEL[fx.stage] || fx.stage);
+    const sep = fx.stage === 'GROUP' ? 'AT' : 'VS';
+    const statusTxt = (fx.status || 'SCHEDULED').toUpperCase();
+    root.innerHTML = `
+      <div class="fixture-header">
+        <div class="fixture-breadcrumb"><span class="amber">WC26-X</span> · ${stageLabel}</div>
+        <div class="fixture-title-row">
+          <div class="team-block">
+            <span class="team-flag">${flagFor(fx.teamA)}</span>
+            <div class="team-code-name">
+              <span class="team-code">${fx.teamA}</span>
+              <span class="team-name">${teamName(fx.teamA)}</span>
+            </div>
+          </div>
+          <div class="vs-divider">${sep}</div>
+          <div class="team-block">
+            <span class="team-flag">${flagFor(fx.teamB)}</span>
+            <div class="team-code-name">
+              <span class="team-code">${fx.teamB}</span>
+              <span class="team-name">${teamName(fx.teamB)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="fixture-meta-row">
+          <div class="fxm"><span class="fxm-l">KICKOFF</span><span class="fxm-v">${kickoff}</span></div>
+          <div class="fxm"><span class="fxm-l">VENUE</span><span class="fxm-v">${fx.venue || '—'}</span></div>
+          <div class="fxm"><span class="fxm-l">STATUS</span><span class="fxm-v" style="color:var(--amber)">${statusTxt}</span></div>
+        </div>
+      </div>
+    `;
+  } else if (sel.type === 'future' && sel.market) {
+    const m = sel.market;
+    root.innerHTML = `
+      <div class="fixture-header">
+        <div class="fixture-breadcrumb"><span class="amber">WC26-X</span> · FUTURES</div>
+        <div class="fixture-title-row" style="margin-bottom:6px">
+          <div class="team-code-name">
+            <span class="team-code" style="font-size:38px">${m.name}</span>
+            <span class="team-name" style="margin-top:6px">${m.desc || ''}</span>
+          </div>
+        </div>
+        <div class="fixture-meta-row">
+          <div class="fxm"><span class="fxm-l">SETTLEMENT</span><span class="fxm-v">July 19, 2026 (final whistle)</span></div>
+          <div class="fxm"><span class="fxm-l">STATUS</span><span class="fxm-v" style="color:var(--amber)">${m.outcomes && m.outcomes.length ? 'OPEN' : '—'}</span></div>
+        </div>
+      </div>
+    `;
+  } else {
+    root.innerHTML = `<div class="fixture-header"><div class="fixture-breadcrumb">Loading…</div></div>`;
+  }
+}
+
+function renderTabs() {
+  const sel = currentSelection();
+  if (sel.type === 'future' || !sel.fixture) {
+    $('#marketTabs').innerHTML = '';
+    return;
+  }
+  const tabs = sel.fixture.markets.map(m => ({ id: m.type, label: tabLabel(m.type) }));
+  // If the saved tab no longer exists for this fixture (e.g. WINNER on a group game), fall back to the first.
+  if (!tabs.find(t => t.id === sel.tab) && tabs[0]) {
+    state.selectedView.tab = tabs[0].id;
+  }
+  $('#marketTabs').innerHTML = tabs.map(t => `
+    <button class="mtab ${t.id === state.selectedView.tab ? 'active' : ''}" data-tab="${t.id}">${t.label}</button>
+  `).join('');
+  $('#marketTabs').querySelectorAll('.mtab').forEach(b => {
+    b.onclick = () => { state.selectedView.tab = b.dataset.tab; saveState(); renderTabs(); renderMarkets(); };
+  });
+}
+
+function renderLockBanner() {
+  const now = Date.now();
+  const root = $('#lockBanner');
+  if (now < MARKETS_OPEN_MS) {
+    root.innerHTML = `
+      <div class="pre-launch-bar">
+        <div class="l-side">
+          <div class="ttl">★ MARKETS NOT YET OPEN</div>
+          Trading opens at the first kickoff of the group stage. Create a handle now
+          and your bankroll will be waiting.
+        </div>
+      </div>
+    `;
+  } else {
+    root.innerHTML = '';
+  }
+}
+
+function renderMarkets() {
+  const sel = currentSelection();
+  const body = $('#marketsBody');
+  let m;
+  if (sel.type === 'fixture') {
+    if (!sel.fixture || !sel.fixture.markets || !sel.fixture.markets.length) {
+      body.innerHTML = `<div class="pos-empty" style="padding:24px">Loading markets…</div>`;
+      return;
+    }
+    m = sel.fixture.markets.find(mk => mk.type === sel.tab) || sel.fixture.markets[0];
+  } else {
+    m = sel.market;
+  }
+  if (!m) {
+    body.innerHTML = `<div class="pos-empty" style="padding:24px">No market selected.</div>`;
+    return;
+  }
+  body.innerHTML = renderMarketCard(m);
+  body.querySelectorAll('.obtn').forEach(btn => {
+    btn.onclick = () => openTradeModal(btn.dataset.oid, btn.dataset.side, m);
+  });
+}
+
+function renderMarketCard(m) {
+  const tradingOpen = Date.now() >= MARKETS_OPEN_MS && Date.now() < MARKETS_CLOSE_MS;
+  const lockedTag = !tradingOpen
+    ? `<span class="mkt-tag locked">LOCKED</span>`
+    : `<span class="mkt-tag">★ LIVE</span>`;
+
+  // Σ-mid arb check for multi-outcome markets
+  let arbHint = '';
+  if (m.outcomes.length > 2) {
+    const sumMid = m.outcomes.reduce((s,o) => s + (state.lastPx[o.id] ?? Math.round(o.prior*100)), 0);
+    const tone = sumMid > 102 ? 'color:var(--maple)' : sumMid < 98 ? 'color:#4ade80' : 'color:var(--chalk-faint)';
+    arbHint = `<span style="font-size:10px;color:var(--chalk-faint);margin-right:14px">Σ mid: <strong style="${tone}">${sumMid}¢</strong></span>`;
+  }
+
+  const rows = m.outcomes.map(o => {
+    const bid = bestBid(o.id), ask = bestAsk(o.id);
+    const last = state.lastPx[o.id];
+    const prob = last != null ? last : Math.round(o.prior * 100);
+    const buyPx  = typeof ask === 'number' ? ask + '¢' : '—';
+    const sellPx = typeof bid === 'number' ? (100 - bid) + '¢' : '—';
+    const flag = o.teamCode ? (TEAMS[o.teamCode]?.flag || '⚽') : '·';
+    const code = o.teamCode ? `<div class="out-code">${o.teamCode}</div>` : '';
+    const codeOrLabel = o.teamCode
+      ? `${code}<div class="out-label">${o.label}</div>`
+      : `<div class="out-code" style="font-size:16px">${o.label}</div>${o.sub ? `<div class="out-label">${o.sub}</div>` : ''}`;
+
+    return `
+      <div class="outcome">
+        <div class="out-name">
+          <span class="out-flag">${flag}</span>
+          <div class="out-codeblock">${codeOrLabel}</div>
+        </div>
+        <div class="out-prob-flap"><span style="font-family:'Bebas Neue';font-size:22px;color:var(--amber)">${prob}¢</span></div>
+        <div class="out-spark">${sparkSvg(state.pxHist[o.id] || [prob])}</div>
+        <div class="obtns">
+          <button class="obtn buy" data-oid="${o.id}" data-side="BUY" ${tradingOpen ? '' : 'disabled'}>
+            <span class="obtn-side">BUY YES</span>
+            <span class="price">${buyPx}</span>
+          </button>
+          <button class="obtn sell" data-oid="${o.id}" data-side="SELL" ${tradingOpen ? '' : 'disabled'}>
+            <span class="obtn-side">BUY NO</span>
+            <span class="price">${sellPx}</span>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
+          <div class="mkt-name">${m.name}</div>
+          <div class="mkt-desc">${m.desc}</div>
+        </div>
+        <div style="display:flex;align-items:center">
+          ${arbHint}${lockedTag}
+        </div>
+      </div>
+      <div>${rows}</div>
+    </div>
+    ${m.type === 'FUTURE' ? `
+    <div class="info-box">
+      <div class="info-box-title">💡 HOW THIS MARKET WORKS</div>
+      <div class="info-box-body">
+        <p>Each row is a <strong>binary contract</strong> paying <strong>$1.00</strong> if that outcome happens, <strong>$0.00</strong> if not. The price in cents is the market's implied probability. A contract at 14¢ means roughly a 14% chance.</p>
+        <p><strong>BUY YES</strong> = you think this outcome will happen. <strong>BUY NO</strong> = you think it won't. You can trade in and out before settlement to lock in profits or cut losses.</p>
+        ${m.id === 'fut.boot' ? `<p><strong>Field (Other)</strong> covers any top scorer not individually listed. A 23¢ price means roughly a 1-in-4 chance the Golden Boot goes to a surprise player.</p>` : ''}
+        <p>Prices are set by supply and demand between traders. The house provides initial liquidity but real prices emerge from your trades.</p>
+      </div>
+    </div>` : ''}
+    <div style="font-size:10px;color:var(--chalk-faint);padding:4px 4px 12px;letter-spacing:1px">
+      ⚠ Play money · synthetic liquidity until live · no real wagering
+    </div>
+  `;
+}
+
+function sparkSvg(arr) {
+  if (!arr || arr.length < 2) {
+    return `<svg width="100%" height="30" viewBox="0 0 100 30"><line x1="0" y1="15" x2="100" y2="15" stroke="rgba(255,255,255,0.1)" stroke-dasharray="2 3"/></svg>`;
+  }
+  const data = arr.slice(-30);
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = Math.max(1, max - min);
+  const w = 100, h = 30;
+  const pts = data.map((v,i) => {
+    const x = (i / (data.length-1)) * w;
+    const y = h - 3 - ((v - min) / range) * (h - 6);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const last = data[data.length-1], first = data[0];
+  const color = last > first ? '#4ade80' : last < first ? '#d62828' : '#888';
+  return `<svg width="100%" height="30" viewBox="0 0 100 30" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/>
+  </svg>`;
+}
+
+function renderPositions() {
+  const list = $('#posList');
+  const oids = Object.keys(state.positions);
+  if (!oids.length) {
+    list.innerHTML = `<div class="pos-empty">No open positions.</div>`;
+    return;
+  }
+  const labelMap = {};
+  getAllOutcomes().forEach(({ outcome, market }) => {
+    labelMap[outcome.id] = { mktName: market.name, label: outcome.label, code: outcome.teamCode };
+  });
+  list.innerHTML = oids.map(oid => {
+    const p = state.positions[oid];
+    const meta = labelMap[oid] || { mktName: '?', label: '?' };
+    const mark = markPx(oid);
+    const direction = p.shares > 0 ? 'YES' : 'NO';
+    const dirColor = direction === 'YES' ? 'var(--liberty-soft)' : 'var(--maple)';
+    const sharesAbs = Math.abs(p.shares);
+    let pnl;
+    if (p.shares > 0) pnl = (mark - p.avgCost) * p.shares / 100;
+    else pnl = (p.avgCost - mark) * sharesAbs / 100;
+    const pnlClass = pnl > 0.005 ? 'pos' : pnl < -0.005 ? 'neg' : '';
+    return `
+      <div class="pos">
+        <div>
+          <div class="pos-l1">${meta.label}</div>
+          <div class="pos-l2">${meta.mktName} · <span style="color:${dirColor}">${sharesAbs} ${direction}</span> @ ${p.avgCost.toFixed(1)}¢</div>
+        </div>
+        <div>
+          <div class="pos-pnl ${pnlClass}">${pnl >= 0 ? '+' : ''}${fmtMoney(pnl)}</div>
+          <div class="pos-mark">mark ${mark.toFixed(1)}¢</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderOpenOrders() {
+  const list = $('#ordersList');
+  if (!list) return;
+  if (!state.trader) {
+    list.innerHTML = `<div class="pos-empty">Sign in to see your resting orders.</div>`;
+    return;
+  }
+  if (!state.openOrders.length) {
+    list.innerHTML = `<div class="pos-empty">No resting orders.</div>`;
+    return;
+  }
+  const labelMap = {};
+  getAllOutcomes().forEach(({ outcome, market }) => {
+    labelMap[outcome.id] = { mktName: market.name, label: outcome.label };
+  });
+  list.innerHTML = state.openOrders.map(o => {
+    const meta = labelMap[o.market_id] || { mktName: '?', label: '?' };
+    const sideCls = o.side === 'BUY' ? 'buy' : 'sell';
+    const sideLabel = o.side === 'BUY' ? 'BUY YES' : 'BUY NO';
+    // For BUY-NO orders the user mentally thinks of the NO price (= 100 - YES px).
+    const displayPx = o.side === 'BUY' ? o.limit_px : (100 - o.limit_px);
+    const filled = o.filled_qty || 0;
+    const remaining = o.remaining_qty || (o.qty - filled);
+    const partialTxt = filled > 0 ? ` <span style="color:var(--amber)">(${filled}/${o.qty} filled)</span>` : '';
+    return `
+      <div class="order">
+        <div>
+          <div class="order-l1"><span class="order-side ${sideCls}">${sideLabel}</span> ${meta.label}</div>
+          <div class="order-l2">${meta.mktName} · ${remaining} @ ${displayPx}¢${partialTxt}</div>
+        </div>
+        <button class="order-cancel" data-order-id="${o.id}">CANCEL</button>
+      </div>`;
+  }).join('');
+  list.querySelectorAll('.order-cancel').forEach(btn => {
+    btn.onclick = () => doCancelOrder(btn.dataset.orderId, btn);
+  });
+}
+
+async function doCancelOrder(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const { error } = await sb.rpc('cancel_order', { p_order_id: orderId });
+  if (error) {
+    toast('✕ CANCEL FAILED', error.message || 'unknown', 'sell');
+    if (btn) { btn.disabled = false; btn.textContent = 'CANCEL'; }
+    return;
+  }
+  toast('⚽ CANCELED', 'reserve refunded to bankroll', 'buy');
+  await Promise.all([loadMe(), loadOpenOrders()]);
+  renderTopBoard();
+  renderOpenOrders();
+}
+
+async function doCancelAllOrders() {
+  if (!state.openOrders.length) {
+    toast('⚽ NOTHING TO CANCEL', 'no resting orders', 'flat');
+    return;
+  }
+  if (!confirm(`Cancel all ${state.openOrders.length} resting order(s)?`)) return;
+  const ids = state.openOrders.map(o => o.id);
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    const { error } = await sb.rpc('cancel_order', { p_order_id: id });
+    if (error) fail++; else ok++;
+  }
+  toast(fail ? '⚠ PARTIAL CANCEL' : '⚽ ALL CANCELED', `${ok} canceled${fail ? ', ' + fail + ' failed' : ''}`, fail ? 'sell' : 'buy');
+  await Promise.all([loadMe(), loadOpenOrders()]);
+  renderTopBoard();
+  renderOpenOrders();
+}
+
+/* ----- ADMIN SETTLEMENT PANEL ----- */
+async function loadPendingResults() {
+  if (!state.trader?.isAdmin) return;
+  const { data, error } = await sb.from('pending_results')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (error || !data) { state.pendingResults = []; return; }
+  state.pendingResults = data;
+}
+
+function renderAdminPanel() {
+  const panel = document.getElementById('adminPanel');
+  if (!panel) return;
+  if (!state.trader?.isAdmin) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  // Populate fixture dropdown with unsettled fixtures
+  const sel = document.getElementById('adminFixture');
+  if (sel && CATALOG.fixtures) {
+    const opts = CATALOG.fixtures
+      .filter(f => f.status !== 'SETTLED')
+      .sort((a, b) => (a.kickoff || '').localeCompare(b.kickoff || ''));
+    sel.innerHTML = opts.map(f =>
+      `<option value="${f.id}">${f.teamA} vs ${f.teamB} · ${f.stage} ${f.matchday || ''} · ${f.id}</option>`
+    ).join('');
+    if (!opts.length) sel.innerHTML = '<option>All fixtures settled</option>';
+  }
+
+  // Render pending results list
+  const list = document.getElementById('adminPendingList');
+  if (!list) return;
+  if (!state.pendingResults?.length) {
+    list.innerHTML = '<div class="pos-empty">No pending results.</div>';
+    return;
+  }
+  const fixMap = {};
+  (CATALOG.fixtures || []).forEach(f => { fixMap[f.id] = f; });
+
+  list.innerHTML = state.pendingResults.map(pr => {
+    const f = fixMap[pr.fixture_id] || {};
+    const homeCode = f.teamA || '?';
+    const awayCode = f.teamB || '?';
+    const isPending = pr.status === 'PENDING';
+    const isConfirmed = pr.status === 'CONFIRMED';
+    return `
+      <div class="admin-pr">
+        <div>
+          <div class="admin-pr-info">${homeCode} vs ${awayCode}</div>
+          <div class="admin-pr-score">${pr.goals_home} – ${pr.goals_away}</div>
+        </div>
+        <div class="admin-pr-actions">
+          ${isPending ? `<button class="admin-btn confirm" onclick="adminConfirm(${pr.id})">SETTLE</button>` : ''}
+          <span class="admin-pr-status ${pr.status.toLowerCase()}">${pr.status}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function adminStageResult() {
+  const fixtureId = document.getElementById('adminFixture')?.value;
+  const goalsHome = parseInt(document.getElementById('adminGoalsHome')?.value);
+  const goalsAway = parseInt(document.getElementById('adminGoalsAway')?.value);
+  if (!fixtureId || isNaN(goalsHome) || isNaN(goalsAway)) {
+    toast('⚠ MISSING FIELDS', 'Select fixture and enter both scores', 'sell');
+    return;
+  }
+  const { data, error } = await sb.rpc('admin_stage_result', {
+    p_fixture_id: fixtureId, p_goals_home: goalsHome, p_goals_away: goalsAway
+  });
+  if (error) { toast('✕ STAGE FAILED', error.message || 'unknown', 'sell'); return; }
+  toast('⚽ RESULT STAGED', `${fixtureId}: ${goalsHome}–${goalsAway}`, 'buy');
+  document.getElementById('adminGoalsHome').value = '';
+  document.getElementById('adminGoalsAway').value = '';
+  await loadPendingResults();
+  renderAdminPanel();
+}
+
+async function adminConfirm(pendingId) {
+  if (!confirm('Settle this result? This pays out all positions and is irreversible.')) return;
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  const { data, error } = await sb.rpc('admin_confirm_pending_result', { p_pending_id: pendingId });
+  if (error) {
+    toast('✕ SETTLE FAILED', error.message || 'unknown', 'sell');
+    if (btn) { btn.disabled = false; btn.textContent = 'SETTLE'; }
+    return;
+  }
+  toast('⚽ SETTLED', JSON.stringify(data?.score || ''), 'buy');
+  await Promise.all([loadMe(), loadPositions(), loadOpenOrders(), loadLeaderboard(), loadPendingResults()]);
+  renderTopBoard(); renderAll(); renderAdminPanel();
+}
+
+function renderTape() {
+  const labelMap = {};
+  const fixMap = {};
+  (CATALOG.fixtures || []).forEach(f => { fixMap[f.id] = f; });
+  getAllOutcomes().forEach(({ outcome, market }) => {
+    const fx = fixMap[market.fixtureId];
+    const fxLabel = fx ? `${fx.teamA} v ${fx.teamB}` : '';
+    labelMap[outcome.id] = { mktName: market.name, label: outcome.label, fxLabel };
+  });
+  const list = $('#tapeList');
+  if (!state.tape.length) {
+    list.innerHTML = `<div class="pos-empty">Tape is quiet.</div>`;
+    return;
+  }
+  list.innerHTML = state.tape.slice(0, 50).map(t => {
+    const meta = labelMap[t.oid] || { mktName: '?', label: '?' };
+    return `
+      <div class="tape">
+        <span class="tape-side ${t.side === 'BUY' ? 'buy' : 'sell'}">${t.side}</span>
+        <div class="tape-name">${meta.label}<small>${meta.fxLabel ? meta.fxLabel + ' · ' : ''}${meta.mktName}</small></div>
+        <div>
+          <div class="tape-px">${t.qty} @ ${t.px}¢</div>
+          <div class="tape-time">${tAgo(t.ts)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderLeaderboard() {
+  const rows = (state.leaderboard && state.leaderboard.length) ? state.leaderboard : [];
+  if (!rows.length) {
+    $('#leaderboardList').innerHTML = `<div class="pos-empty">No traders ranked yet. Be the first.</div>`;
+    $('#lbHint').textContent = state.trader ? 'LIVE' : 'sign up to join';
+    return;
+  }
+  $('#leaderboardList').innerHTML = rows.map((row, i) => {
+    const rank = i + 1;
+    const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+    const cls = (row.me ? 'me ' : '') + rankClass;
+    const sign = row.realized >= 0 ? '+' : '';
+    const pnlCls = row.realized >= 0.005 ? 'pos' : row.realized <= -0.005 ? 'neg' : '';
+    return `
+      <div class="lb-row ${cls}">
+        <span class="lb-rank">${rank}</span>
+        <span class="lb-name">${escapeHtml(row.name)}</span>
+        <span class="lb-pnl ${pnlCls}">${sign}${fmtMoney(row.realized)}</span>
+      </div>`;
+  }).join('');
+  $('#lbHint').textContent = 'LIVE';
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderPaTicker() {
+  const items = [];
+  getAllFixtures().forEach(fx => {
+    const mkt = fx.markets.find(m => m.type === 'RESULT' || m.type === 'WINNER');
+    if (!mkt || !mkt.outcomes || !mkt.outcomes.length) return;
+    const oHome = mkt.outcomes.find(o => o.teamCode === fx.teamA);
+    const oAway = mkt.outcomes.find(o => o.teamCode === fx.teamB);
+    const oDraw = mkt.outcomes.find(o => o.teamCode == null);
+    const px = (o) => o ? (state.lastPx[o.id] ?? Math.round((o.prior || 0.5) * 100)) : null;
+    const pH = px(oHome), pA = px(oAway), pD = px(oDraw);
+    let line = `<span class="amber">${fx.teamA}</span> ${pH ?? '—'}¢`;
+    if (pD != null) line += ` <span class="sep">/ X ${pD}¢ /</span>`;
+    else line += ` <span class="sep">vs</span>`;
+    line += ` ${pA ?? '—'}¢ <span class="amber">${fx.teamB}</span>`;
+    items.push(`<span class="pa-item">${line}</span>`);
+  });
+  if (!items.length) { $('#paTicker').innerHTML = ''; return; }
+  const joined = items.join('') + items.join('');
+  $('#paTicker').innerHTML = joined;
+}
+
+function renderAll() {
+  renderBracketNav();
+  renderFuturesNav();
+  renderFixtureHeader();
+  renderTabs();
+  renderLockBanner();
+  renderMarkets();
+  renderPositions();
+  renderOpenOrders();
+  renderTape();
+  renderLeaderboard();
+}
+
+/* ----- TRADE MODAL ----- */
+let modalCtx = null;
+
+async function openTradeModal(oid, defaultSide, mkt) {
+  if (Date.now() < MARKETS_OPEN_MS) {
+    toast('TRADING LOCKED', 'Markets open at the first group-stage kickoff.', 'err');
+    return;
+  }
+  if (!state.trader) {
+    $('#signupModal').classList.add('open');
+    return;
+  }
+  const outcome = mkt.outcomes.find(o => o.id === oid);
+  modalCtx = { oid, side: defaultSide, mkt, outcome };
+  const flag = outcome.teamCode ? (TEAMS[outcome.teamCode]?.flag || '⚽') : '⚽';
+  $('#tmFlag').textContent = flag;
+  $('#tmMkt').textContent = mkt.name;
+  $('#tmName').textContent = outcome.label;
+  $('#tmQty').value = 100;
+  $('#tradeModal').classList.add('open');
+  // Pull full live depth for this market, then set defaults from the real book
+  await loadBookDepth(oid);
+  if (defaultSide === 'BUY') $('#tmPrice').value = bestAsk(oid) ?? Math.round((outcome.prior||0.5)*100);
+  else $('#tmPrice').value = bestBid(oid) ?? Math.round((outcome.prior||0.5)*100);
+  setSideUi(defaultSide);
+  refreshTradeCalcs();
+}
+function closeTradeModal() { $('#tradeModal').classList.remove('open'); modalCtx = null; }
+
+function setSideUi(side) {
+  if (!modalCtx) return;
+  modalCtx.side = side;
+  $('#sideBuy').classList.toggle('active', side === 'BUY');
+  $('#sideSell').classList.toggle('active', side === 'SELL');
+  $('#tmPrice').value = side === 'BUY'
+    ? (bestAsk(modalCtx.oid) ?? $('#tmPrice').value)
+    : (bestBid(modalCtx.oid) ?? $('#tmPrice').value);
+  refreshTradeCalcs();
+}
+
+function refreshTradeCalcs() {
+  if (!modalCtx) return;
+  const { oid, side } = modalCtx;
+  const limitPx = parseInt($('#tmPrice').value || '0', 10);
+  const qty = Math.min(500, parseInt($('#tmQty').value || '0', 10));
+  const bid = bestBid(oid), ask = bestAsk(oid);
+  $('#bestHint').textContent = `bid ${bid ?? '—'}¢ / ask ${ask ?? '—'}¢`;
+  $('#bookSpread').textContent = (bid != null && ask != null) ? `${ask-bid}¢ (mid ${((bid+ask)/2).toFixed(1)}¢)` : '—';
+
+  const bk = state.books[oid];
+  const lvls = 4;
+  const bidRows = [];
+  for (let i = 0; i < lvls; i++) {
+    const b = bk.bids[i];
+    bidRows.push(`<div class="book-row">
+      <span class="qty">${b ? b.qty : ''}</span>
+      <span class="px-bid">${b ? b.px+'¢' : ''}</span>
+      <span class="qty-r"></span>
+    </div>`);
+  }
+  bidRows.reverse();
+  const askRows = [];
+  for (let i = lvls-1; i >= 0; i--) {
+    const a = bk.asks[i];
+    askRows.push(`<div class="book-row">
+      <span class="qty"></span>
+      <span class="px-ask">${a ? a.px+'¢' : ''}</span>
+      <span class="qty-r">${a ? a.qty : ''}</span>
+    </div>`);
+  }
+  $('#bookPeek').innerHTML = askRows.join('') + bidRows.join('');
+
+  if (!limitPx || !qty || limitPx < 1 || limitPx > 99 || qty < 1 || qty > 500) {
+    $('#rcAvg').textContent = '—';
+    $('#rcFill').textContent = '—';
+    $('#rcCost').textContent = '—';
+    $('#rcPay').textContent = '—';
+    $('#tmSubmit').disabled = true;
+    return;
+  }
+  const sim = dryRunOrder(oid, side, limitPx, qty);
+  $('#rcAvg').textContent = sim.filledQty > 0 ? sim.avgFillPx.toFixed(2) + '¢' : '—';
+  $('#rcFill').textContent = `${sim.filledQty} / ${sim.restQty}`;
+
+  let cost;
+  if (side === 'BUY') {
+    cost = (sim.totalFillCents + sim.restQty * limitPx) / 100;
+    $('#rcPay').textContent = '$' + (qty * 1.00).toFixed(2);
+  } else {
+    cost = (sim.filledQty * 100 - sim.totalFillCents + sim.restQty * (100 - limitPx)) / 100;
+    $('#rcPay').textContent = '$' + (qty * 1.00).toFixed(2) + ' (vs $0 if NO wins)';
+  }
+  $('#rcCost').textContent = '$' + cost.toFixed(2);
+  const enough = cost <= state.bankroll + 0.0001;
+  $('#tmSubmit').disabled = !enough;
+  $('#tmSubmit').textContent = enough ? 'SUBMIT' : 'INSUFFICIENT BANKROLL';
+}
+
+async function doTradeSubmit() {
+  if (!modalCtx) return;
+  if (Date.now() < MARKETS_OPEN_MS) {
+    toast('TRADING LOCKED', 'Markets open at the first group-stage kickoff.', 'err');
+    closeTradeModal(); return;
+  }
+  if (Date.now() >= MARKETS_CLOSE_MS) {
+    toast('MARKETS CLOSED', 'The tournament is over. All markets have settled.', 'err');
+    closeTradeModal(); return;
+  }
+  const { oid, side } = modalCtx;
+  const limitPx = parseInt($('#tmPrice').value || '0', 10);
+  const qty = Math.min(500, parseInt($('#tmQty').value || '0', 10));
+  if (!limitPx || !qty || limitPx < 1 || limitPx > 99 || qty < 1) return;
+
+  $('#tmSubmit').disabled = true;
+  $('#tmSubmit').textContent = 'SUBMITTING…';
+  const realizedBefore = state.realized;
+  let result;
+  try {
+    result = await placeOrderRPC(oid, side, limitPx, qty);
+  } catch (err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    // Surface the engine's named errors in a friendly way
+    if (/INSUFFICIENT_BANKROLL/.test(msg)) toast('REJECTED', 'Insufficient bankroll.', 'err');
+    else if (/MARKET_NOT_OPEN/.test(msg)) toast('MARKET CLOSED', 'This market is not open for trading.', 'err');
+    else if (/USER_NOT_FOUND/.test(msg)) toast('NOT REGISTERED', 'Your account is not set up. Sign up first.', 'err');
+    else toast('ORDER FAILED', msg.slice(0, 90), 'err');
+    $('#tmSubmit').disabled = false; $('#tmSubmit').textContent = 'SUBMIT';
+    return;
+  }
+
+  // Re-hydrate the bits this trade touched (server is source of truth)
+  await loadMe();
+  await loadPositions();
+  await loadOpenOrders();
+  await loadBookDepth(oid);
+  await loadTape();
+  await loadLeaderboard();
+
+  const cls = side === 'BUY' ? 'buy' : 'sell';
+  const filled = result.filled_qty || 0;
+  const resting = result.remaining_qty || 0;
+  const avg = result.avg_fill_px != null ? Number(result.avg_fill_px) : null;
+  if (filled > 0) {
+    const realizedDelta = state.realized - realizedBefore;
+    const rd = Math.abs(realizedDelta) > 0.005 ? ` · realized ${realizedDelta >= 0 ? '+' : ''}${fmtMoney(realizedDelta)}` : '';
+    toast(side === 'BUY' ? '⚽ BOUGHT YES' : '⚽ BOUGHT NO',
+      `${filled} @ ${avg != null ? avg.toFixed(2) : '—'}¢${resting ? ' · ' + resting + ' resting' : ''}${rd}`, cls);
+  } else {
+    toast('⚽ ORDER RESTING', `${resting} @ ${limitPx}¢`, cls);
+  }
+  $('#tmSubmit').disabled = false; $('#tmSubmit').textContent = 'SUBMIT';
+  closeTradeModal();
+  renderTopBoard(); renderAll(); renderPaTicker();
+}
+
+/* ----- SIMULATE BACKGROUND COUNTER-FLOW ----- */
+function simulateTick() {
+  if (Date.now() < MARKETS_OPEN_MS) {
+    // Light pre-launch drift so the ticker has motion
+    const oids = Object.keys(state.books);
+    if (!oids.length) return;
+    for (let i = 0; i < 1; i++) {
+      const oid = oids[Math.floor(Math.random() * oids.length)];
+      const bk = state.books[oid];
+      if (!bk || !bk.asks.length || !bk.bids.length) continue;
+      if (Math.random() < 0.15) {
+        const dir = Math.random() < 0.5 ? 'BUY' : 'SELL';
+        const sz = 20 + Math.floor(Math.random() * 60);
+        if (dir === 'BUY' && bk.asks[0].qty > sz) { recordPrint(oid, bk.asks[0].px, sz, 'BUY'); bk.asks[0].qty -= sz; }
+        else if (dir === 'SELL' && bk.bids[0].qty > sz) { recordPrint(oid, bk.bids[0].px, sz, 'SELL'); bk.bids[0].qty -= sz; }
+      }
+    }
+    saveState();
+    renderTopBoard(); renderPaTicker();
+    return;
+  }
+  // Heavier simulation when trading is live (not yet, but ready)
+  const oids = Object.keys(state.books);
+  for (let i = 0; i < 2; i++) {
+    const oid = oids[Math.floor(Math.random()*oids.length)];
+    const bk = state.books[oid];
+    if (!bk) continue;
+    if (Math.random() < 0.30 && bk.asks.length && bk.bids.length) {
+      const dir = Math.random() < 0.5 ? 'BUY' : 'SELL';
+      const sz = 20 + Math.floor(Math.random()*80);
+      if (dir === 'BUY' && bk.asks[0].qty > sz) { recordPrint(oid, bk.asks[0].px, sz, 'BUY'); bk.asks[0].qty -= sz; }
+      else if (dir === 'SELL' && bk.bids[0].qty > sz) { recordPrint(oid, bk.bids[0].px, sz, 'SELL'); bk.bids[0].qty -= sz; }
+    }
+    if (bk.asks.length < 3 || (bk.asks[0] && bk.asks[0].qty < 50)) {
+      const ref = state.lastPx[oid] || 50;
+      bk.asks.push({ px: clampPx(ref + 1 + Math.floor(Math.random()*2)), qty: 100 + Math.floor(Math.random()*200), ts: Date.now(), mine: false });
+    }
+    if (bk.bids.length < 3 || (bk.bids[0] && bk.bids[0].qty < 50)) {
+      const ref = state.lastPx[oid] || 50;
+      bk.bids.push({ px: clampPx(ref - 1 - Math.floor(Math.random()*2)), qty: 100 + Math.floor(Math.random()*200), ts: Date.now(), mine: false });
+    }
+    sortBook(oid);
+  }
+  saveState();
+  renderTopBoard(); renderMarkets(); renderTape(); renderPaTicker();
+}
+
+/* ----- SIGNUP / SUBMIT ----- */
+function ensureOnboarded() {
+  if (!state.trader) $('#signupModal').classList.add('open');
+}
+
+function isValidLinkedIn(u) {
+  if (!u) return false;
+  try { return /linkedin\.com$/i.test(new URL(u.trim()).hostname); } catch(e){ return false; }
+}
+
+/* ----- UTILS ----- */
+function tAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s/60);
+  if (m < 60) return m + 'm';
+  return Math.floor(m/60) + 'h';
+}
+function fmtMoney(n) {
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function toast(title, body, cls) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (cls || '');
+  el.innerHTML = `<strong>${title}</strong>${body}`;
+  $('#toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(), 300); }, 3500);
+}
+
+/* ----- WIRE UP ----- */
+$('#signupBtn').onclick = () => $('#signupModal').classList.add('open');
+$('#rulesBtn').onclick = () => $('#rulesModal').classList.add('open');
+
+let authMode = 'signup'; // 'signup' | 'signin'
+
+$('#toggleAuthMode').onclick = (e) => {
+  e.preventDefault();
+  authMode = authMode === 'signup' ? 'signin' : 'signup';
+  const signin = authMode === 'signin';
+  $('#suName').closest('.field').style.display = signin ? 'none' : '';
+  $('#suLinkedin').closest('.field').style.display = signin ? 'none' : '';
+  const rules = document.querySelector('#signupModal .rules'); if (rules) rules.style.display = signin ? 'none' : '';
+  document.querySelector('#signupModal .modal-title').textContent = signin ? '★ SIGN IN' : '★ RESERVE YOUR HANDLE';
+  $('#suSubmit').textContent = signin ? 'SIGN IN' : 'RESERVE HANDLE';
+  $('#toggleAuthMode').textContent = signin ? 'New here? Create a handle' : 'Already registered? Sign in';
+};
+
+$('#suSubmit').onclick = async () => {
+  const email = ($('#suEmail').value || '').trim();
+  const password = ($('#suPassword').value || '');
+  if (!/.+@.+\..+/.test(email)) { toast('EMAIL REQUIRED', 'Enter a valid email.', 'err'); return; }
+  if (password.length < 6) { toast('PASSWORD', 'Min 6 characters.', 'err'); return; }
+
+  $('#suSubmit').disabled = true; $('#suSubmit').textContent = 'WORKING…';
+  try {
+    if (authMode === 'signin') {
+      // Returning user: email + password only.
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      $('#signupModal').classList.remove('open');
+      await hydrateAll();
+      subscribeRealtime();
+      if (state.trader) toast('★ WELCOME BACK', `Signed in as ${state.trader.name}.`, 'buy');
+      else toast('SIGNED IN', 'No handle yet. Switch to Create a handle.', 'err');
+      return;
+    }
+
+    // Sign-up path: needs name + linkedin too.
+    const name = ($('#suName').value || '').trim();
+    const linkedin = ($('#suLinkedin').value || '').trim();
+    if (name.length < 2) { toast('NAME REQUIRED', 'Enter a display name.', 'err'); return; }
+    if (!isValidLinkedIn(linkedin)) { toast('LINKEDIN URL', 'Enter a valid linkedin.com URL.', 'err'); return; }
+
+    let { data: signUpData, error: signUpErr } = await sb.auth.signUp({ email, password });
+    if (signUpErr && !/already registered|already exists/i.test(signUpErr.message)) throw signUpErr;
+    if (!signUpData || !signUpData.session) {
+      const { error: signInErr } = await sb.auth.signInWithPassword({ email, password });
+      if (signInErr) throw signInErr;
+    }
+    const { error: profErr } = await sb.rpc('create_user_profile', {
+      p_display_name: name, p_linkedin_url: linkedin,
+    });
+    if (profErr) throw profErr;
+
+    $('#signupModal').classList.remove('open');
+    toast('★ HANDLE RESERVED', `Welcome, ${name}.`, 'buy');
+    await hydrateAll();
+    subscribeRealtime();
+  } catch (err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    if (/DISPLAY_NAME|display_name_uniq/i.test(msg)) toast('NAME TAKEN', 'That display name is taken.', 'err');
+    else if (/linkedin_uniq/i.test(msg)) toast('LINKEDIN TAKEN', 'That LinkedIn is already registered.', 'err');
+    else if (/Invalid login|invalid_credentials/i.test(msg)) toast('SIGN-IN FAILED', 'Wrong email or password.', 'err');
+    else toast(authMode === 'signin' ? 'SIGN-IN FAILED' : 'SIGN-UP FAILED', msg.slice(0, 90), 'err');
+  } finally {
+    $('#suSubmit').disabled = false;
+    $('#suSubmit').textContent = authMode === 'signin' ? 'SIGN IN' : 'RESERVE HANDLE';
+  }
+};
+
+$('#sideBuy').onclick = () => setSideUi('BUY');
+$('#sideSell').onclick = () => setSideUi('SELL');
+$('#tmPrice').addEventListener('input', refreshTradeCalcs);
+$('#tmQty').addEventListener('input', refreshTradeCalcs);
+$('#tmSubmit').onclick = doTradeSubmit;
+document.querySelectorAll('.quick').forEach(q => {
+  q.onclick = () => { $('#tmQty').value = q.dataset.qty; refreshTradeCalcs(); };
+});
+document.querySelectorAll('[data-close]').forEach(b => {
+  b.onclick = () => document.getElementById(b.dataset.close).classList.remove('open');
+});
+// Sign out (server data is permanent and authoritative)
+async function doSignOut() {
+  await sb.auth.signOut();
+  if (RT) { sb.removeChannel(RT); RT = null; }
+  location.reload();   // hard reset of all UI state; signup modal will pop on the fresh boot
+}
+$('#resetBtn').onclick = async () => {
+  if (!confirm('Sign out of WC26-X?\n\nYour bankroll, trades, and P&L stay on the server. Signing in again restores everything.')) return;
+  await doSignOut();
+};
+$('#pfSignOut').onclick = async () => {
+  $('#profileModal').classList.remove('open');
+  await doSignOut();
+};
+$('#clearTape').onclick = () => { state.tape = []; renderTape(); };
+const cancelAllBtn = document.getElementById('cancelAllBtn');
+if (cancelAllBtn) cancelAllBtn.onclick = () => doCancelAllOrders();
+const adminStageBtn = document.getElementById('adminStageBtn');
+if (adminStageBtn) adminStageBtn.onclick = () => adminStageResult();
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+/* ----- INIT ----- */
+function initRender() {
+  renderTopBoard();
+  renderPaTicker();
+  renderAll();
+}
+
+async function boot() {
+  initRender();                 // paint the shell immediately
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    SESSION = session;
+    await hydrateAll();          // logged in → pull everything (also sets auth UI)
+    subscribeRealtime();
+  } else {
+    // Not logged in: still load public market data + catalog + leaderboard so the
+    // board isn't empty, then prompt sign-up.
+    await loadCatalog();
+    await loadMarketsTopOfBook();
+    await loadTape();
+    await loadLeaderboard();
+    initRender();
+    updateAuthUI();
+    ensureOnboarded();
+  }
+  setTimeout(renderTopBoard, 100); // let layout settle before first flip
+}
+boot();
+
+// Refresh the leaderboard periodically as a fallback to realtime.
+setInterval(renderLockBanner, 30000);
+setInterval(() => { if (state.trader) loadLeaderboard(); }, 30000);
+
+</script>
+</body>
+</html>
